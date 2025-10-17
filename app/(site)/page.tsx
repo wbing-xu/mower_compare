@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { mockCompanies } from "@/data/mock-companies";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, getProductImage } from "@/lib/utils";
 import { loadAllProducts } from "@/lib/server/products";
 
 export default async function HomePage() {
@@ -111,31 +111,30 @@ export default async function HomePage() {
           </Link>
         </div>
         <div className="grid gap-6 md:grid-cols-3">
-          {featuredProducts.map((product) => (
-            <div key={product.id} className="rounded-3xl bg-white p-6 shadow-card">
-              <div className="flex items-center gap-4">
-                <div className="h-14 w-14 rounded-2xl bg-slate-100">
-                  <img
-                    src={product.coverImage}
-                    alt={product.modelName}
-                    className="h-full w-full object-contain p-2"
-                  />
+          {featuredProducts.map((product) => {
+            const imageSrc = getProductImage(product);
+            return (
+              <div key={product.id} className="rounded-3xl bg-white p-6 shadow-card">
+                <div className="flex items-center gap-4">
+                  <div className="h-14 w-14 rounded-2xl bg-slate-100">
+                    <img src={imageSrc} alt={product.modelName} className="h-full w-full object-contain p-2" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-slate-800">{product.modelName}</p>
+                    <p className="text-xs text-slate-500">
+                      {product.marketPosition} · {product.powertrain}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-lg font-semibold text-slate-800">{product.modelName}</p>
-                  <p className="text-xs text-slate-500">
-                    {product.marketPosition} · {product.powertrain}
+                <p className="mt-4 line-clamp-3 text-sm text-slate-600">{product.summary}</p>
+                {product.priceRange ? (
+                  <p className="mt-4 text-sm font-semibold text-brand-600">
+                    {formatCurrency(product.priceRange[0])} - {formatCurrency(product.priceRange[1])}
                   </p>
-                </div>
+                ) : null}
               </div>
-              <p className="mt-4 line-clamp-3 text-sm text-slate-600">{product.summary}</p>
-              {product.priceRange ? (
-                <p className="mt-4 text-sm font-semibold text-brand-600">
-                  {formatCurrency(product.priceRange[0])} - {formatCurrency(product.priceRange[1])}
-                </p>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>

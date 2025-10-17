@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { specDictionary, specGroups } from "@/data/specs-dictionary";
 import { type ProductSummary } from "@/types/domain";
-import { cn, formatRange } from "@/lib/utils";
+import { cn, formatRange, getProductImage } from "@/lib/utils";
 
 interface CompareTableProps {
   products: ProductSummary[];
@@ -74,7 +74,11 @@ export function CompareTable({ products }: CompareTableProps) {
               <div key={product.id} className="border-l border-slate-100 p-6">
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 rounded-2xl bg-slate-100">
-                    <img src={product.coverImage} alt={product.modelName} className="h-full w-full object-contain p-2" />
+                    <img
+                      src={getProductImage(product)}
+                      alt={product.modelName}
+                      className="h-full w-full object-contain p-2"
+                    />
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{product.modelName}</p>

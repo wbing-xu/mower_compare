@@ -16,6 +16,13 @@ const MARKET_POSITIONS: ProductSummary["marketPosition"][] = [
 ];
 const POWERTRAINS: ProductSummary["powertrain"][] = ["ICE", "BEV", "Hybrid", "Robot"];
 
+function toSlug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function unauthorized() {
   return new NextResponse("Unauthorized", {
     status: 401,
@@ -113,10 +120,27 @@ function normalizeProduct(input: ImportProductInput): ProductSummary | undefined
     }
   }
 
+  const imageSpec = specs.find(
+    (spec) => spec.definitionId === "product_image" && typeof spec.value === "string"
+  );
+  const normalizedCoverImage = (() => {
+    if (typeof input.coverImage === "string" && input.coverImage.trim() !== "") {
+      return input.coverImage.trim();
+    }
+    const specImage = typeof imageSpec?.value === "string" ? imageSpec.value.trim() : "";
+    if (specImage) {
+      return specImage;
+    }
+    if (input.brandName) {
+      return `/logos/${toSlug(input.brandName)}.svg`;
+    }
+    return `/logos/${toSlug(input.companyId)}.svg`;
+  })();
+
   return {
     id: input.id,
     modelName: input.modelName,
-    coverImage: input.coverImage ?? `/logos/${input.brandName?.toLowerCase().replace(/\s+/g, "-") || input.companyId}.svg`,
+    coverImage: normalizedCoverImage,
     companyId: input.companyId,
     divisionId: input.divisionId,
     categoryId: input.categoryId,

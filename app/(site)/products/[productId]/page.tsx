@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { specDictionary, specGroups } from "@/data/specs-dictionary";
-import { formatRange } from "@/lib/utils";
+import { formatRange, getProductImage } from "@/lib/utils";
 import { CompareBar } from "@/components/compare/compare-bar";
 import { CompareCTA } from "@/components/compare/compare-cta";
 import { loadProductById } from "@/lib/server/products";
@@ -16,6 +16,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound();
   }
 
+  const heroImage = getProductImage(product);
+
   const groupedSpecs = specDictionary.reduce<Record<string, typeof specDictionary>>((acc, definition) => {
     acc[definition.group] ??= [];
     acc[definition.group].push(definition);
@@ -28,7 +30,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-6">
             <div className="h-24 w-24 rounded-3xl bg-slate-100">
-              <img src={product.coverImage} alt={product.modelName} className="h-full w-full object-contain p-4" />
+              <img src={heroImage} alt={product.modelName} className="h-full w-full object-contain p-4" />
             </div>
             <div>
               <h1 className="text-3xl font-semibold text-slate-800">{product.modelName}</h1>

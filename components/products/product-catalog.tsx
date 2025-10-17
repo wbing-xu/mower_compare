@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { productFilters } from "@/data/mock-products";
 import { CompareBar } from "@/components/compare/compare-bar";
 import { CompareCTA } from "@/components/compare/compare-cta";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, getProductImage } from "@/lib/utils";
 import { type ProductSummary } from "@/types/domain";
 
 const filterDefaults = {
@@ -125,11 +125,12 @@ export function ProductCatalog({ products }: { products: ProductSummary[] }) {
         <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {filteredProducts.map((product) => {
             const cuttingWidth = product.specs.find((spec) => spec.definitionId === "cutting_width");
+            const imageSrc = getProductImage(product);
             return (
               <div key={product.id} className="flex flex-col rounded-3xl bg-white p-6 shadow-card">
                 <div className="flex items-center gap-4">
                   <div className="h-14 w-14 rounded-2xl bg-slate-100">
-                    <img src={product.coverImage} alt={product.modelName} className="h-full w-full object-contain p-2" />
+                    <img src={imageSrc} alt={product.modelName} className="h-full w-full object-contain p-2" />
                   </div>
                   <div>
                     <p className="text-base font-semibold text-slate-800">{product.modelName}</p>

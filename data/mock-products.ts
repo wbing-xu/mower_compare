@@ -1374,19 +1374,6 @@ export const mockProducts: ProductSummary[] = [
 
 export const productFilters: ProductFilterOption[] = [
   {
-    id: "usage",
-    label: "平台类型",
-    group: "用途",
-    type: "multi-select",
-    values: [
-      { value: "riding", label: "乘骑式/零转" },
-      { value: "stand-on", label: "站立式" },
-      { value: "robot", label: "机器人" },
-      { value: "reel", label: "滚筒/球场" },
-      { value: "trailer", label: "拖挂/特种" }
-    ]
-  },
-  {
     id: "powertrain",
     label: "动力类型",
     group: "动力",
@@ -1399,7 +1386,7 @@ export const productFilters: ProductFilterOption[] = [
     ]
   },
   {
-    id: "market",
+    id: "marketPosition",
     label: "定位",
     group: "定位",
     type: "multi-select",
@@ -1411,14 +1398,14 @@ export const productFilters: ProductFilterOption[] = [
     ]
   },
   {
-    id: "cutting-width",
+    id: "cuttingWidth",
     label: "割幅",
     group: "割幅",
     type: "range",
     range: { min: 18, max: 190, step: 1, unit: "cm" }
   },
   {
-    id: "release-year",
+    id: "releaseYear",
     label: "上市年份",
     group: "年份",
     type: "range",
