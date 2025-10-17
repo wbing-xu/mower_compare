@@ -301,7 +301,7 @@ const OFFICIAL_SOURCES_BASE = [
       /\/sds\//i,
       /\.pdf$/i
     ],
-    limit: 120,
+    limit: 360,
     useBrowser: true,
     transform(product, { url, browserMeta }) {
       const specs = Array.isArray(product.specs) ? [...product.specs] : [];
@@ -497,24 +497,366 @@ function extractJsonLdBlocks(html) {
   return results;
 }
 
-function pickProductNode(jsonLd) {
-  for (const node of jsonLd) {
-    if (!node) continue;
-    const type = node["@type"];
-    if (typeof type === "string" && type.toLowerCase() === "product") {
-      return node;
+function decodeHtmlEntities(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value
+    .replace(/&quot;/gi, '"')
+    .replace(/&#34;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&");
+}
+
+function safeJsonParse(payload) {
+  if (typeof payload !== "string") {
+    return null;
+  }
+  const trimmed = payload.trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+function extractBalancedJson(source, startIndex) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let start = -1;
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index];
+    if (escaped) {
+      escaped = false;
+      continue;
     }
-    if (Array.isArray(type) && type.map((item) => String(item).toLowerCase()).includes("product")) {
-      return node;
+    if (char === '\\') {
+      escaped = true;
+      continue;
     }
-    if (node.item && typeof node.item === "object") {
-      const nested = pickProductNode([node.item]);
-      if (nested) {
-        return nested;
+    if (char === '"') {
+      inString = !inString;
+      if (inString && depth === 0) {
+        // strings before the first brace should not flip the start offset
+      }
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (char === '{') {
+      if (depth === 0) {
+        start = index;
+      }
+      depth += 1;
+      continue;
+    }
+    if (char === '}') {
+      if (depth === 0) {
+        return "";
+      }
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        return source.slice(start, index + 1);
       }
     }
   }
-  return null;
+  return "";
+}
+
+function extractAssignmentJson(html, identifiers) {
+  const results = [];
+  if (typeof html !== "string" || html.length === 0) {
+    return results;
+  }
+  for (const identifier of identifiers) {
+    const regex = new RegExp(`${identifier.replace(/[\^$*+?.()|[\]{}]/g, "\\$&")}\\s*=\\s*({)`, "gi");
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      const braceIndex = match.index + match[0].length - 1;
+      const jsonText = extractBalancedJson(html, braceIndex);
+      if (!jsonText) {
+        continue;
+      }
+      const parsed = safeJsonParse(jsonText);
+      if (parsed) {
+        results.push(parsed);
+      }
+    }
+  }
+  return results;
+}
+
+function collectEmbeddedJsonCandidates(html) {
+  const results = [];
+  if (typeof html !== "string" || html.length === 0) {
+    return results;
+  }
+
+  const scriptRegex = /<script[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = scriptRegex.exec(html)) !== null) {
+    const payload = decodeHtmlEntities(match[1] ?? "")
+      .replace(/^<!--/, "")
+      .replace(/-->$/, "")
+      .trim();
+    const parsed = safeJsonParse(payload);
+    if (parsed) {
+      results.push(parsed);
+    }
+  }
+
+  const idScriptRegex = /<script[^>]*(id|data-key)=["']__(?:NUXT|NEXT)_DATA__["'][^>]*>([\s\S]*?)<\/script>/gi;
+  while ((match = idScriptRegex.exec(html)) !== null) {
+    const parsed = safeJsonParse(decodeHtmlEntities(match[2] ?? ""));
+    if (parsed) {
+      results.push(parsed);
+    }
+  }
+
+  const dataAttrRegex = /data-(?:props|product|product-data|component-props|analytics|state|json|model)=("|')([\s\S]*?)\1/gi;
+  while ((match = dataAttrRegex.exec(html)) !== null) {
+    const payload = decodeHtmlEntities(match[2] ?? "").trim();
+    const parsed = safeJsonParse(payload);
+    if (parsed) {
+      results.push(parsed);
+    }
+  }
+
+  const assignments = extractAssignmentJson(html, [
+    "window.__NUXT__",
+    "window.__NUXT_DATA__",
+    "window.__NEXT_DATA__",
+    "window.__INITIAL_STATE__",
+    "window.__PRELOADED_STATE__",
+    "window.digitalData",
+    "window.dataLayer",
+    "window.__TORO_STATE__"
+  ]);
+  for (const item of assignments) {
+    results.push(item);
+  }
+
+  return results;
+}
+
+
+function buildJsonKeyPattern(key, captureString = false) {
+  const escaped = key.replace(/[\^$*+?.()|[\]{}]/g, "\\$&");
+  if (captureString) {
+    return new RegExp(`"${escaped}"\s*:\s*"([^"\\]*(?:\\\\.[^"\\]*)*)"`, "i");
+  }
+  return new RegExp(`"${escaped}"\s*:\s*([^,}"']+)`, "i");
+}
+
+function extractJsonStringValue(html, key) {
+  if (typeof html !== "string" || !key) {
+    return "";
+  }
+  const match = html.match(buildJsonKeyPattern(key, true));
+  if (!match) {
+    return "";
+  }
+  const snippet = `{${match[0]}}`;
+  const parsed = safeJsonParse(snippet);
+  const raw = parsed && typeof parsed[key] === "string" ? parsed[key] : decodeHtmlEntities(match[1] ?? "");
+  return normalizeWhitespace(raw.replace(/\n/g, " ").replace(/\r/g, " ").replace(/\t/g, " "));
+}
+
+function extractJsonNumberValue(html, key) {
+  if (typeof html !== "string" || !key) {
+    return null;
+  }
+  const match = html.match(buildJsonKeyPattern(key, false));
+  if (!match) {
+    return null;
+  }
+  return parsePriceValue(match[1]);
+}
+
+function extractFallbackSku(html) {
+  const keys = ["sku", "modelNumber", "model_number", "productID", "mpn", "partNumber", "part_number"];
+  for (const key of keys) {
+    const value = extractJsonStringValue(html, key);
+    if (value) {
+      return value;
+    }
+  }
+  const textMatch = html.match(/(?:SKU|Model(?:\s*Number)?|Item Number|Product Number|Part Number)[^A-Z0-9]*([A-Z0-9-]{3,})/i);
+  return textMatch ? normalizeWhitespace(textMatch[1]) : "";
+}
+
+function extractFallbackPriceInfo(html) {
+  const priceValue = extractJsonNumberValue(html, "price") ?? extractJsonNumberValue(html, "priceValue");
+  const currencyValue = extractJsonStringValue(html, "priceCurrency");
+  if (priceValue != null) {
+    return { price: priceValue, currency: currencyValue || undefined };
+  }
+  const priceMatch = html.match(/\$\s*([0-9][0-9,]*(?:\.[0-9]{2})?)/);
+  if (priceMatch) {
+    return { price: parsePriceValue(priceMatch[1]), currency: currencyValue || "USD" };
+  }
+  return { price: null, currency: currencyValue || undefined };
+}
+
+function extractFallbackAvailability(html) {
+  const value = extractJsonStringValue(html, "availability");
+  if (value) {
+    return value;
+  }
+  const textMatch = html.match(/Availability[^A-Za-z0-9]*([A-Za-z ]{3,})/i);
+  return textMatch ? normalizeWhitespace(textMatch[1]) : "";
+}
+
+const PRODUCT_TYPE_KEYWORDS = new Set([
+  "product",
+  "productmodel",
+  "individualproduct",
+  "productgroup",
+  "productcollection",
+  "productseries",
+  "productline",
+  "productfamily"
+]);
+
+const PRODUCT_GROUP_TYPE_KEYWORDS = new Set([
+  "productgroup",
+  "productcollection",
+  "productseries",
+  "productline",
+  "productfamily"
+]);
+
+function normalizeTypeList(typeValue) {
+  if (!typeValue) {
+    return [];
+  }
+  if (Array.isArray(typeValue)) {
+    return typeValue.flatMap((item) => normalizeTypeList(item));
+  }
+  const normalized = String(typeValue).trim().toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+  return normalized.split(/\s*,\s*/).map((value) => value.trim()).filter(Boolean);
+}
+
+function scoreProductCandidate(node, typeList) {
+  if (!node || typeof node !== "object") {
+    return 0;
+  }
+  let score = 0;
+  const hasName = typeof node.name === "string" && node.name.trim().length > 0;
+  const hasSku = typeof node.sku === "string" && node.sku.trim().length > 0;
+  const hasMpn = typeof node.mpn === "string" && node.mpn.trim().length > 0;
+  const hasProductId = typeof node.productID === "string" && node.productID.trim().length > 0;
+  const hasModelNumber = typeof node.modelNumber === "string" && node.modelNumber.trim().length > 0;
+  const hasDescription = typeof node.description === "string" && node.description.trim().length > 0;
+  const hasImage =
+    typeof node.image === "string" ||
+    (Array.isArray(node.image) && node.image.some((item) => typeof item === "string" && item.trim()));
+
+  const directType = typeList.some((type) => type === "product" || type === "productmodel" || type === "individualproduct");
+  const groupType = typeList.some((type) => PRODUCT_GROUP_TYPE_KEYWORDS.has(type));
+
+  if (directType) {
+    score += 6;
+  } else if (groupType) {
+    score += 2;
+  }
+
+  if (hasName) score += 3;
+  if (hasSku) score += 3;
+  if (hasMpn) score += 2;
+  if (hasProductId) score += 2;
+  if (hasModelNumber) score += 2;
+  if (hasDescription) score += 1;
+  if (hasImage) score += 1;
+  if (node.offers) score += 1;
+
+  return score;
+}
+
+function enqueueNestedProductNodes(queue, node) {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const add = (value) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item && typeof item === "object") {
+          queue.push(item);
+        }
+      }
+      return;
+    }
+    if (value && typeof value === "object") {
+      queue.push(value);
+    }
+  };
+
+  add(node["@graph"]);
+  add(node.mainEntity);
+  add(node.item);
+  add(node.isVariantOf);
+  add(node.hasVariant);
+  add(node.model);
+  add(node.offers);
+  add(node.isRelatedTo);
+  add(node.relatedTo);
+
+  if (Array.isArray(node.itemListElement)) {
+    for (const element of node.itemListElement) {
+      if (!element) continue;
+      if (element.item && typeof element.item === "object") {
+        queue.push(element.item);
+      } else if (typeof element === "object") {
+        queue.push(element);
+      }
+    }
+  }
+}
+
+function pickProductNode(jsonLd) {
+  const queue = Array.isArray(jsonLd) ? [...jsonLd] : [];
+  const candidates = [];
+  const seen = new Set();
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (seen.has(node)) {
+      continue;
+    }
+    seen.add(node);
+
+    const typeList = normalizeTypeList(node["@type"]);
+    const score = scoreProductCandidate(node, typeList);
+    if (score > 0 && typeList.some((type) => PRODUCT_TYPE_KEYWORDS.has(type))) {
+      candidates.push({ node, score });
+    } else if (score > 0 && !candidates.length) {
+      // keep track of fallback candidates even if type metadata is missing
+      candidates.push({ node, score: score - 1 });
+    }
+
+    enqueueNestedProductNodes(queue, node);
+  }
+
+  if (candidates.length === 0) {
+    return null;
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0]?.node ?? null;
 }
 
 function pickOffer(node) {
@@ -1070,14 +1412,25 @@ async function scrapeOfficialProduct(url, source) {
   }
 
   const shouldTryBrowser = (source.useBrowser ?? false) || preferBrowserMode || forceBrowserMode;
-  if ((!html || html.length === 0) && shouldTryBrowser) {
+  if (shouldTryBrowser) {
     try {
       const browserResponse = await fetchWithBrowser(url);
-      html = browserResponse.text ?? html;
-      browserMeta = browserResponse.meta ?? null;
+      if (browserResponse?.text) {
+        if (!html || browserResponse.text.length > html.length) {
+          html = browserResponse.text;
+        } else if (!html) {
+          html = browserResponse.text;
+        }
+      }
+      if (browserResponse?.meta) {
+        browserMeta = browserResponse.meta;
+      }
     } catch (browserError) {
       const reason = browserError instanceof Error ? browserError.message : String(browserError);
       console.warn(`× 浏览器模式访问产品页面 ${url} 失败: ${reason}`);
+      if (!html && forceBrowserMode) {
+        throw browserError instanceof Error ? browserError : new Error(reason);
+      }
     }
   }
 
@@ -1090,29 +1443,51 @@ async function scrapeOfficialProduct(url, source) {
     return null;
   }
   const jsonLdBlocks = extractJsonLdBlocks(html);
-  const productNode = pickProductNode(jsonLdBlocks);
+  let productNode = pickProductNode(jsonLdBlocks);
+  let supplementalNode = null;
+  const embeddedJsonBlocks = collectEmbeddedJsonCandidates(html);
+  if (embeddedJsonBlocks.length > 0) {
+    const embeddedNode = pickProductNode(embeddedJsonBlocks);
+    if (!productNode) {
+      productNode = embeddedNode;
+    } else if (embeddedNode && embeddedNode !== productNode) {
+      supplementalNode = embeddedNode;
+    }
+  }
   const metaTitle = extractMetaContent(html, "og:title") || extractTitle(html);
   const browserTitle = browserMeta?.title ? normalizeWhitespace(browserMeta.title) : "";
   const browserHeading = browserMeta?.heading ? normalizeWhitespace(browserMeta.heading) : "";
-  const nodeName = productNode?.name ? normalizeWhitespace(productNode.name) : "";
+  const rawNodeName = productNode?.name || supplementalNode?.name || "";
+  const nodeName = rawNodeName ? normalizeWhitespace(rawNodeName) : "";
   const modelName = [nodeName, metaTitle, browserHeading, browserTitle].find((value) => value) || "";
   if (!modelName) {
     console.warn(`× 无法解析产品名称: ${url}`);
     return null;
   }
+  const descriptionSource = productNode?.description || supplementalNode?.description;
   const metaDescription =
-    productNode?.description
-      ? normalizeWhitespace(productNode.description)
+    descriptionSource
+      ? normalizeWhitespace(descriptionSource)
       : extractMetaContent(html, "og:description") ||
         extractMetaNameContent(html, "description") ||
         (browserMeta?.description ? normalizeWhitespace(browserMeta.description) : "");
   const imageSources = [];
-  const nodeImage = productNode?.image;
-  if (typeof nodeImage === "string") {
-    imageSources.push(nodeImage);
-  } else if (Array.isArray(nodeImage)) {
-    imageSources.push(...nodeImage.filter((item) => typeof item === "string"));
-  }
+  const pushImages = (value) => {
+    if (!value) return;
+    if (typeof value === "string") {
+      imageSources.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string") {
+          imageSources.push(item);
+        }
+      }
+    }
+  };
+  pushImages(productNode?.image);
+  pushImages(supplementalNode?.image);
   const metaImage = extractMetaContent(html, "og:image") || extractMetaContent(html, "og:image:url");
   if (metaImage) {
     imageSources.push(metaImage);
@@ -1127,11 +1502,54 @@ async function scrapeOfficialProduct(url, source) {
     .map((value) => ensureAbsoluteImage(value, url))
     .find((value) => typeof value === "string" && value.startsWith("http"));
 
-  const sku = normalizeWhitespace(productNode?.sku || productNode?.mpn || productNode?.productID || "");
-  const offer = pickOffer(productNode);
-  const price = offer ? parsePriceValue(offer.price ?? offer.priceSpecification?.price) : null;
-  const currency = offer?.priceCurrency || offer?.priceSpecification?.priceCurrency || offer?.priceSpecification?.priceCurrency?.code;
-  const releaseYear = extractYear(productNode?.releaseDate) ?? extractYear(productNode?.productionDate) ?? new Date().getFullYear();
+  let sku = normalizeWhitespace(
+    productNode?.sku ||
+      productNode?.mpn ||
+      productNode?.productID ||
+      productNode?.modelNumber ||
+      supplementalNode?.sku ||
+      supplementalNode?.mpn ||
+      supplementalNode?.productID ||
+      supplementalNode?.modelNumber ||
+      ""
+  );
+  if (!sku) {
+    sku = extractFallbackSku(html);
+  }
+
+  let offer = pickOffer(productNode);
+  if (!offer && supplementalNode) {
+    offer = pickOffer(supplementalNode);
+  }
+
+  let price = offer ? parsePriceValue(offer.price ?? offer.priceSpecification?.price) : null;
+  let currency =
+    offer?.priceCurrency ||
+    offer?.priceSpecification?.priceCurrency ||
+    offer?.priceSpecification?.priceCurrency?.code ||
+    undefined;
+
+  if (price == null) {
+    const fallbackPrice = extractFallbackPriceInfo(html);
+    if (fallbackPrice.price != null) {
+      price = fallbackPrice.price;
+    }
+    if (fallbackPrice.currency && !currency) {
+      currency = fallbackPrice.currency;
+    }
+  }
+
+  let availability = offer?.availability || "";
+  if (!availability) {
+    availability = extractFallbackAvailability(html);
+  }
+
+  const releaseYear =
+    extractYear(productNode?.releaseDate) ??
+    extractYear(productNode?.productionDate) ??
+    extractYear(supplementalNode?.releaseDate) ??
+    extractYear(supplementalNode?.productionDate) ??
+    new Date().getFullYear();
   const summary = metaDescription || `${source.brandName} ${modelName}`;
   const slugFromUrl = (() => {
     try {
@@ -1158,8 +1576,8 @@ async function scrapeOfficialProduct(url, source) {
   if (price != null) {
     specs.push({ definitionId: "official_price", value: price, unit: typeof currency === "string" ? currency : undefined });
   }
-  if (offer?.availability) {
-    specs.push({ definitionId: "market_availability", value: normalizeWhitespace(offer.availability) });
+  if (availability) {
+    specs.push({ definitionId: "market_availability", value: normalizeWhitespace(availability) });
   }
 
   const product = {
