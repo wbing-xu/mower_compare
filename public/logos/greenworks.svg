@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" role="img" aria-labelledby="title">
+  <title id="title">Greenworks</title>
+  <rect width="200" height="80" rx="12" fill="#67b112" />
+  <text x="100" y="50" font-family="'Segoe UI', Arial, sans-serif" font-size="32" font-weight="700" fill="#0f1a08" text-anchor="middle">
+    GREENWORKS
+  </text>
+</svg>

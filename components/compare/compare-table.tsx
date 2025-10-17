@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { specDictionary, specGroups } from "@/data/specs-dictionary";
 import { type ProductSummary } from "@/types/domain";
 import { cn, formatRange } from "@/lib/utils";
@@ -144,7 +144,6 @@ export function CompareTable({ products }: CompareTableProps) {
               </div>
             </div>
           ))}
-          <ScrollBar orientation="horizontal" className="h-2" />
         </ScrollArea>
       </div>
     </div>

@@ -4,9 +4,9 @@
 
 ## ✨ 功能概览
 
-- **公司目录**：以品牌卡片呈现行业玩家，支持标签与搜索。
-- **公司详情**：展示 Toro → Exmark/Ditch Witch/BOSS/Hayter 等多级树状产品矩阵，自动合并导入数据。
-- **产品总览**：按用途/动力/割幅等筛选型号卡片，结合导入数据实时刷新。
+- **公司目录**：以品牌卡片呈现行业玩家，覆盖 Stanley Black & Decker、Husqvarna、John Deere、Toro、AriensCo、Stiga、Swisher、Bobcat、Greenworks、MTD、TTI、Chervon、Scag、Wright、Mean Green、Stihl、Textron、Honda、Kubota、Bad Boy 等品牌矩阵。
+- **公司详情**：展示多级树状产品结构（公司 → 品牌/事业部 → 品类 → 系列 → 型号），并与导入数据自动合并。
+- **产品总览**：按用途/动力/割幅等筛选型号卡片，结合导入数据实时刷新，内置 24 款示例型号。
 - **对比分析**：勾选型号进入对比栏，高亮差异、折叠相同项，覆盖机械/导航/软件/环境等分组字段。
 - **CMS 入口**：提供 CSV / JSON 产品导入工具，使用 `pudu / pudu` 账号向 `/api/import` 写入数据。
 
@@ -17,7 +17,7 @@
 - **前端框架**：Next.js 14（App Router, TypeScript, Server Components）
 - **样式体系**：Tailwind CSS + 自定义主题色板
 - **状态管理**：Zustand（对比栏、筛选器示例）
-- **UI 组件**：Radix UI（滚动区域）、lucide-react 图标
+- **UI 组件**：自定义滚动区域、lucide-react 图标
 
 ## 📁 目录结构
 
@@ -66,11 +66,17 @@
    ```bash
    npm install
    ```
-2. **启动开发服务器**
+2. **刷新示例数据（可选）**
+   ```bash
+   npm run refresh:data
+   ```
+   该命令会读取 `data/mock-products.ts` 并生成 `data/imported-products.json`，模拟“导入后写入数据库”的过程。
+
+3. **启动开发服务器**
    ```bash
    npm run dev
    ```
-3. 打开浏览器访问 `http://localhost:3000` 即可查看示例站点。
+4. 打开浏览器访问 `http://localhost:3000` 即可查看示例站点。
 
 ## 📥 导入接口（演示）
 
@@ -104,6 +110,11 @@
 - **CSV 规则**：字段名与 `specs-dictionary.ts` 中的 `key` 对应；如需附带单位可使用 `值||单位` 格式。
 
 导入成功后，数据将写入 `data/imported-products.json`，同时影响产品目录、公司矩阵与对比页的展示。
+
+## 📦 数据刷新脚本
+
+- `npm run refresh:data`：从 `data/mock-products.ts` 提取 24 条示例型号写入 `data/imported-products.json`，便于快速搭建或重置演示数据库。
+- 生成的 JSON 文件既可直接作为静态数据，也可作为后端导入真实数据库时的结构参考。
 
 ## 📦 后续计划
 

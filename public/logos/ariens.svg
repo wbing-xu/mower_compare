@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" role="img" aria-labelledby="title">
+  <title id="title">AriensCo</title>
+  <rect width="200" height="80" rx="12" fill="#ff6b2c" />
+  <text x="100" y="50" font-family="'Segoe UI', Arial, sans-serif" font-size="32" font-weight="700" fill="#fff" text-anchor="middle">
+    ARIENS
+  </text>
+</svg>

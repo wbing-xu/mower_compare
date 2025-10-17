@@ -6,10 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "refresh:data": "node scripts/refresh-dataset.mjs"
   },
   "dependencies": {
-    "@radix-ui/react-scroll-area": "^1.0.5",
     "clsx": "^2.1.0",
     "lucide-react": "^0.402.0",
     "next": "14.2.3",
