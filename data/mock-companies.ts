@@ -163,6 +163,12 @@ export const mockCompanies: Company[] = [
             name: "Revolution 电动平台",
             taxonomyPath: ["乘骑式", "电动"],
             children: [{ id: "toro-revolution-series", name: "Revolution Series" }]
+          },
+          {
+            id: "toro-official-catalog",
+            name: "Toro 官网目录",
+            taxonomyPath: ["乘骑式", "民用"],
+            children: [{ id: "toro-official-series", name: "官方型号" }]
           }
         ]
       }

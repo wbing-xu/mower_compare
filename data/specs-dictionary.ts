@@ -30,6 +30,15 @@ export const specDictionary: SpecDefinition[] = [
     description: "主图或展示图片地址"
   },
   {
+    id: "official_url",
+    group: "media",
+    key: "official_url",
+    labelZh: "官网链接",
+    labelEn: "Official URL",
+    dataType: "string",
+    description: "品牌官网的产品详情页面"
+  },
+  {
     id: "mechanical_spec",
     group: "mechanical",
     key: "mechanical_spec",
@@ -200,6 +209,51 @@ export const specDictionary: SpecDefinition[] = [
     dataType: "boolean"
   },
   {
+    id: "official_family",
+    group: "basic",
+    key: "official_family",
+    labelZh: "官网产品线",
+    labelEn: "Official Family",
+    dataType: "string",
+    description: "品牌官网中的一级目录或产品线"
+  },
+  {
+    id: "official_series",
+    group: "basic",
+    key: "official_series",
+    labelZh: "官网系列",
+    labelEn: "Official Series",
+    dataType: "string",
+    description: "品牌官网展示的系列名称"
+  },
+  {
+    id: "official_path",
+    group: "basic",
+    key: "official_path",
+    labelZh: "官网分类路径",
+    labelEn: "Official Path",
+    dataType: "string",
+    description: "官网产品页面所属的完整目录层级"
+  },
+  {
+    id: "official_summary",
+    group: "basic",
+    key: "official_summary",
+    labelZh: "官网简介",
+    labelEn: "Official Summary",
+    dataType: "string",
+    description: "直接来源于品牌官网的产品摘要"
+  },
+  {
+    id: "official_sku",
+    group: "basic",
+    key: "official_sku",
+    labelZh: "官网 SKU",
+    labelEn: "Official SKU",
+    dataType: "string",
+    description: "品牌官网披露的 SKU、MPN 或产品编号"
+  },
+  {
     id: "navigation_obstacle",
     group: "sensing",
     key: "navigation_obstacle",
@@ -352,5 +406,23 @@ export const specDictionary: SpecDefinition[] = [
     labelEn: "MSRP",
     dataType: "number",
     unit: "CNY"
+  },
+  {
+    id: "official_price",
+    group: "market",
+    key: "official_price",
+    labelZh: "官网价格",
+    labelEn: "Official Price",
+    dataType: "number",
+    description: "品牌官网列出的价格，unit 字段标示币种"
+  },
+  {
+    id: "market_availability",
+    group: "market",
+    key: "market_availability",
+    labelZh: "供货状态",
+    labelEn: "Availability",
+    dataType: "string",
+    description: "官网提供的供货或库存信息"
   }
 ];

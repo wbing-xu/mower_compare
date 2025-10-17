@@ -116,6 +116,48 @@
 - `npm run refresh:data`：从 `data/mock-products.ts` 提取 24 条示例型号写入 `data/imported-products.json`，并按需下载或生成产品图片 / Logo，便于快速搭建或重置演示数据库。
 - 生成的 JSON 文件既可直接作为静态数据，也可作为后端导入真实数据库时的结构参考。
 
+### 使用真实浏览器抓取官网数据
+
+部分品牌（如 Toro）会针对脚本访问返回 403，需要模拟真实浏览器才能拿到完整的产品目录。脚本已内置 Playwright 方案：
+
+1. 安装 Playwright 依赖（仅需一次）：
+   ```bash
+   npm install --save-dev playwright
+   npx playwright install chromium
+   ```
+2. 执行数据刷新时追加 `--browser` 参数，即可自动唤起无头 Chromium 并以浏览器方式抓取：
+   ```bash
+   npm run refresh:data -- --browser
+   ```
+   如果需要观察抓取过程，可再加上 `--show-browser` 打开可视化窗口（macOS 默认支持）。
+
+脚本仍会优先尝试普通 HTTP 请求；仅在被拒绝或显式开启 `--browser` 时才切换到浏览器模式，从而兼顾 CI 环境与本地 Mac 的使用体验。
+
+### 指定额外的系列页面
+
+Toro 站点的目录页分散在各个系列下（如 TimeCutter、Titan）。脚本会先从产品总目录出发，递归挖掘所有符合官方规则的系列目录（例如 `*-mowers`、`*-equipment`、`*-series` 等），确保 TimeCutter、Titan 等栏目不会被漏掉。如果你手上还有更多官方系列链接，可通过 `--official-listing` 参数追加：
+
+```bash
+npm run refresh:data -- --browser \
+  --official-listing=toro::https://www.toro.com/en/homeowner/riding-mowers/timecutter-mowers \
+  --official-listing=toro::https://www.toro.com/en/homeowner/riding-mowers/titan-mowers
+```
+
+参数格式为 `品牌标识::URL`，品牌标识支持 `toro` / `Toro` / `toro-official` 等大小写形式；若省略品牌标识则默认追加到 Toro。脚本会自动去重并在普通请求失败时继续使用浏览器模式加载这些页面，确保 TimeCutter、Titan 等系列的所有型号都能被抓取到。
+
+### 只抓取指定系列
+
+如果你只想先验证某几个目录页（例如 TimeCutter、Titan），可以在追加 `--official-listing` 的同时配合以下参数：
+
+```bash
+npm run refresh:data -- --browser --force-official \
+  --official-listing-only --official-no-sitemaps \
+  --official-listing=https://www.toro.com/en/homeowner/riding-mowers/timecutter-mowers \
+  --official-listing=https://www.toro.com/en/homeowner/riding-mowers/titan-mowers
+```
+
+`--official-listing-only` 会忽略脚本内置的默认目录（包括产品总目录），`--official-no-sitemaps` 会跳过 sitemap，避免加载整个站点。这样在 macOS 上配合 `--browser` 即可完全模拟人工浏览两条系列页面，显著缩短测试时间。
+
 ## 📦 后续计划
 
 - 接入 Prisma ORM + PostgreSQL，实现公司/产品/参数的可持久化存储。
