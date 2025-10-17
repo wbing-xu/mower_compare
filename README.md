@@ -135,7 +135,7 @@
 
 ### 指定额外的系列页面
 
-Toro 站点的目录页分散在各个系列下（如 TimeCutter、Titan）。脚本默认会遍历产品总目录及上述两个系列页面，如果你手上还有更多官方系列链接，可通过 `--official-listing` 参数追加：
+Toro 站点的目录页分散在各个系列下（如 TimeCutter、Titan）。脚本会先从产品总目录出发，递归挖掘所有符合官方规则的系列目录（例如 `*-mowers`、`*-equipment`、`*-series` 等），确保 TimeCutter、Titan 等栏目不会被漏掉。如果你手上还有更多官方系列链接，可通过 `--official-listing` 参数追加：
 
 ```bash
 npm run refresh:data -- --browser \

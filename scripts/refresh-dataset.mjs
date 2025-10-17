@@ -283,6 +283,11 @@ const OFFICIAL_SOURCES_BASE = [
       "https://www.toro.com/en/homeowner/riding-mowers/timecutter-mowers",
       "https://www.toro.com/en/homeowner/riding-mowers/titan-mowers"
     ],
+    listingFollowPatterns: [
+      /https:\/\/www\.toro\.com\/en\/[^?#]+-(mowers|mower|equipment|tractors|vehicles|series|collection|sprayers|spreaders|rollers|attachments|systems)(?:\/(overview|features|specifications|products))?$/i,
+      /https:\/\/www\.toro\.com\/en\/[^?#]+\/(overview|products|collection)$/i
+    ],
+    listingFollowMaxDepth: 2,
     includePatterns: [/https:\/\/www\.toro\.com\/en\//i],
     excludePatterns: [
       /\/dealer/i,
@@ -684,6 +689,127 @@ function uniqueUrls(urls) {
   return result;
 }
 
+function shouldFollowListingUrl(url, source, hostAllowList) {
+  const followPatterns = Array.isArray(source.listingFollowPatterns) ? source.listingFollowPatterns : [];
+  if (followPatterns.some((pattern) => pattern.test(url))) {
+    return true;
+  }
+  if (followPatterns.length > 0) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    if (hostAllowList && hostAllowList.size > 0 && !hostAllowList.has(parsed.host)) {
+      return false;
+    }
+    const path = parsed.pathname || "/";
+    if (path === "/") {
+      return false;
+    }
+    if (/[?#]/.test(parsed.search || "")) {
+      return false;
+    }
+    if (/\.(?:html?|pdf|jpe?g|png|gif|svg|webp|zip)$/i.test(path)) {
+      return false;
+    }
+    const segments = path.split("/").filter(Boolean);
+    if (segments.length === 0) {
+      return false;
+    }
+    const last = segments[segments.length - 1];
+    if (!last) {
+      return false;
+    }
+    const lower = last.toLowerCase();
+    if (/(manual|document|support|download)/.test(lower)) {
+      return false;
+    }
+    if (/\d/.test(lower) && !/-series$/i.test(lower)) {
+      return false;
+    }
+    return segments.length <= 4;
+  } catch {
+    return false;
+  }
+}
+
+async function exploreListingPages(source) {
+  if (!Array.isArray(source.listingPages) || source.listingPages.length === 0) {
+    return { productLinks: [], listingPages: [] };
+  }
+  const shouldTryBrowser = (source.useBrowser ?? false) || preferBrowserMode || forceBrowserMode;
+  const followMaxDepth =
+    typeof source.listingFollowMaxDepth === "number" && source.listingFollowMaxDepth >= 0
+      ? source.listingFollowMaxDepth
+      : 1;
+  const listingSet = new Set(source.listingPages);
+  const visitedListings = new Set();
+  const queued = new Set(source.listingPages);
+  const queue = source.listingPages.map((url) => ({ url, depth: 0 }));
+  const productSet = new Set();
+  const productLinks = [];
+  const hostAllowList = new Set(
+    source.listingPages
+      .map((pageUrl) => {
+        try {
+          return new URL(pageUrl).host;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+  );
+
+  while (queue.length > 0) {
+    const { url, depth } = queue.shift();
+    if (visitedListings.has(url)) {
+      continue;
+    }
+    visitedListings.add(url);
+
+    let collected = [];
+    const httpLinks = await collectLinksFromPage(url, source);
+    collected.push(...httpLinks);
+
+    if (shouldTryBrowser) {
+      try {
+        const browserLinks = await collectLinksWithBrowser(url, source);
+        collected.push(...browserLinks);
+      } catch (error) {
+        console.warn(
+          `× 浏览器模式解析目录 ${url} 失败: ${error instanceof Error ? error.message : String(error)}`
+        );
+        if (forceBrowserMode) {
+          throw error instanceof Error ? error : new Error(String(error));
+        }
+      }
+    }
+
+    const filtered = filterOfficialUrls(uniqueUrls(collected), source);
+    for (const link of filtered) {
+      if (!link || listingSet.has(link)) {
+        continue;
+      }
+      const followAsListing = shouldFollowListingUrl(link, source, hostAllowList);
+      if (followAsListing && depth < followMaxDepth) {
+        if (!queued.has(link)) {
+          console.log(`↻ 发现额外目录页 ${link}`);
+          queue.push({ url: link, depth: depth + 1 });
+          queued.add(link);
+        }
+        listingSet.add(link);
+        continue;
+      }
+      if (!productSet.has(link)) {
+        productSet.add(link);
+        productLinks.push(link);
+      }
+    }
+  }
+
+  return { productLinks, listingPages: Array.from(listingSet) };
+}
+
 async function loadPlaywrightModule() {
   try {
     return await import("playwright");
@@ -886,53 +1012,26 @@ async function fetchWithBrowser(url) {
 
 async function gatherOfficialCandidates(source) {
   const urlBuckets = [];
+  let expandedListingPages = Array.isArray(source.listingPages) ? [...source.listingPages] : [];
+  if (Array.isArray(source.listingPages) && source.listingPages.length > 0) {
+    const { productLinks, listingPages } = await exploreListingPages(source);
+    urlBuckets.push(...productLinks);
+    if (Array.isArray(listingPages) && listingPages.length > 0) {
+      expandedListingPages = Array.from(new Set([...expandedListingPages, ...listingPages]));
+    }
+  }
   if (Array.isArray(source.sitemapUrls)) {
     for (const sitemapUrl of source.sitemapUrls) {
       const entries = await collectSitemapEntries(sitemapUrl);
       urlBuckets.push(...entries);
     }
   }
-  if (Array.isArray(source.listingPages)) {
-    for (const pageUrl of source.listingPages) {
-      const links = await collectLinksFromPage(pageUrl, source);
-      urlBuckets.push(...links);
-    }
-  }
   let filtered = filterOfficialUrls(urlBuckets, source);
   let unique = uniqueUrls(filtered);
-  if (Array.isArray(source.listingPages) && source.listingPages.length > 0) {
-    const listingSet = new Set(source.listingPages);
+  if (Array.isArray(expandedListingPages) && expandedListingPages.length > 0) {
+    const listingSet = new Set(expandedListingPages);
     unique = unique.filter((link) => !listingSet.has(link));
   }
-
-  const shouldTryBrowser = (source.useBrowser ?? false) || preferBrowserMode || forceBrowserMode;
-  if (shouldTryBrowser && Array.isArray(source.listingPages)) {
-    const missingAll = unique.length === 0;
-    if (missingAll) {
-      console.log(`HTTP 抓取 ${source.brandName} 目录为空，尝试浏览器模式…`);
-    }
-    if (missingAll || source.useBrowser) {
-      const browserLinks = [];
-      for (const pageUrl of source.listingPages) {
-        try {
-          const links = await collectLinksWithBrowser(pageUrl, source);
-          browserLinks.push(...links);
-        } catch (error) {
-          console.warn(
-            `× 浏览器模式解析目录 ${pageUrl} 失败: ${error instanceof Error ? error.message : String(error)}`
-          );
-          if (forceBrowserMode) {
-            throw error instanceof Error ? error : new Error(String(error));
-          }
-        }
-      }
-      if (browserLinks.length > 0) {
-        filtered = filterOfficialUrls(urlBuckets.concat(browserLinks), source);
-        unique = uniqueUrls(filtered);
-      }
-    }
-  }
-
   if (source.limit && unique.length > source.limit) {
     return unique.slice(0, source.limit);
   }
