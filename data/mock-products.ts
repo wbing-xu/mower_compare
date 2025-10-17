@@ -19,7 +19,7 @@ export const mockProducts: ProductSummary[] = [
     specs: [
       { definitionId: "product_image", value: "https://images.toro.com/lazerz-x.jpg" },
       { definitionId: "mechanical_spec", value: "乘骑式 · 零转" },
-      { definitionId: "mechanical_strength", value: "重载焊接框架，12" 厚度轮胎" },
+      { definitionId: "mechanical_strength", value: "重载焊接框架，12\" 厚度轮胎" },
       { definitionId: "weight", value: 612, unit: "kg" },
       { definitionId: "dimensions", value: "2110×1340×1780 mm" },
       { definitionId: "cutting_width", value: 152, unit: "cm" },
