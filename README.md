@@ -133,6 +133,18 @@
 
 脚本仍会优先尝试普通 HTTP 请求；仅在被拒绝或显式开启 `--browser` 时才切换到浏览器模式，从而兼顾 CI 环境与本地 Mac 的使用体验。
 
+### 指定额外的系列页面
+
+Toro 站点的目录页分散在各个系列下（如 TimeCutter、Titan）。脚本默认会遍历产品总目录及上述两个系列页面，如果你手上还有更多官方系列链接，可通过 `--official-listing` 参数追加：
+
+```bash
+npm run refresh:data -- --browser \
+  --official-listing=toro::https://www.toro.com/en/homeowner/riding-mowers/timecutter-mowers \
+  --official-listing=toro::https://www.toro.com/en/homeowner/riding-mowers/titan-mowers
+```
+
+参数格式为 `品牌标识::URL`，品牌标识支持 `toro` / `Toro` / `toro-official` 等大小写形式；若省略品牌标识则默认追加到 Toro。脚本会自动去重并在普通请求失败时继续使用浏览器模式加载这些页面，确保 TimeCutter、Titan 等系列的所有型号都能被抓取到。
+
 ## 📦 后续计划
 
 - 接入 Prisma ORM + PostgreSQL，实现公司/产品/参数的可持久化存储。

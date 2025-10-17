@@ -14,7 +14,8 @@ const IMAGE_ACCEPT_HEADER =
   "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
 const DOCUMENT_ACCEPT_HEADER =
   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
-const args = new Set(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = new Set(rawArgs);
 const skipDownload = args.has("--skip-download");
 const skipOfficialScrape = args.has("--skip-official");
 const forceOfficialScrape = args.has("--force-official");
@@ -228,7 +229,43 @@ const LOGO_SOURCES = [
   }
 ];
 
-const OFFICIAL_SOURCES = [
+function parseOfficialListingArgs(tokens) {
+  const map = new Map();
+  for (const token of tokens) {
+    if (typeof token !== "string" || !token.startsWith("--official-listing=")) {
+      continue;
+    }
+    const payload = token.slice("--official-listing=".length).trim();
+    if (!payload) {
+      continue;
+    }
+    let brandKey = "";
+    let urlValue = payload;
+    const separatorIndex = payload.indexOf("::");
+    if (separatorIndex >= 0) {
+      brandKey = payload.slice(0, separatorIndex).trim();
+      urlValue = payload.slice(separatorIndex + 2).trim();
+    }
+    if (!urlValue) {
+      continue;
+    }
+    if (!brandKey) {
+      brandKey = "toro";
+    }
+    const normalizedKey = brandKey.toLowerCase();
+    const existing = map.get(normalizedKey);
+    if (existing) {
+      existing.push(urlValue);
+    } else {
+      map.set(normalizedKey, [urlValue]);
+    }
+  }
+  return map;
+}
+
+const extraOfficialListings = parseOfficialListingArgs(rawArgs);
+
+const OFFICIAL_SOURCES_BASE = [
   {
     idPrefix: "toro-official",
     brandName: "Toro",
@@ -239,7 +276,11 @@ const OFFICIAL_SOURCES = [
     marketPosition: "consumer",
     powertrain: "ICE",
     sitemapUrls: ["https://www.toro.com/sitemap.xml", "https://www.toro.com/en/sitemap.xml"],
-    listingPages: ["https://www.toro.com/en/product-catalog"],
+    listingPages: [
+      "https://www.toro.com/en/product-catalog",
+      "https://www.toro.com/en/homeowner/riding-mowers/timecutter-mowers",
+      "https://www.toro.com/en/homeowner/riding-mowers/titan-mowers"
+    ],
     includePatterns: [/https:\/\/www\.toro\.com\/en\//i],
     excludePatterns: [
       /\/dealer/i,
@@ -311,6 +352,18 @@ const OFFICIAL_SOURCES = [
     }
   }
 ];
+
+const OFFICIAL_SOURCES = OFFICIAL_SOURCES_BASE.map((source) => {
+  const candidateKeys = [source.companyId, source.brandName, source.idPrefix]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+  const additions = candidateKeys.flatMap((key) => extraOfficialListings.get(key) ?? []);
+  if (!additions.length) {
+    return source;
+  }
+  const uniqueListings = Array.from(new Set([...(source.listingPages ?? []), ...additions]));
+  return { ...source, listingPages: uniqueListings };
+});
 
 function extractArray(content, exportName) {
   const regex = new RegExp(`export const ${exportName}[^=]*=\\s*(\\[[\\s\\S]*?\\n\\]);`);
@@ -480,6 +533,70 @@ function parsePriceValue(raw) {
   return Number.isFinite(value) ? value : null;
 }
 
+function tryResolveCandidate(candidate, baseUrl) {
+  if (!candidate) {
+    return null;
+  }
+  let value = String(candidate).trim();
+  if (!value) {
+    return null;
+  }
+  value = value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x2F;/gi, "/")
+    .replace(/&#47;/gi, "/")
+    .replace(/\u002F/gi, "/")
+    .replace(/\u0026/gi, "&")
+    .replace(/\\\//g, "/");
+  value = value.replace(/^['"`(\[]+/, "");
+  let attempt = value;
+  for (let i = 0; i < 4; i += 1) {
+    const resolved = resolveUrl(baseUrl, attempt);
+    if (resolved) {
+      return resolved;
+    }
+    if (!/[)"',.;\]]$/.test(attempt)) {
+      break;
+    }
+    attempt = attempt.slice(0, -1);
+  }
+  return null;
+}
+
+function extractUrlsFromHtml(html, baseUrl) {
+  if (typeof html !== "string" || html.length === 0) {
+    return [];
+  }
+  const links = new Set();
+  const addCandidate = (candidate) => {
+    const resolved = tryResolveCandidate(candidate, baseUrl);
+    if (resolved) {
+      links.add(resolved);
+    }
+  };
+  const anchorRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = anchorRegex.exec(html)) !== null) {
+    addCandidate(match[1]);
+  }
+  const normalized = html.replace(/\u002F/gi, "/").replace(/\\\//g, "/");
+  const absoluteRegex = /https?:\/\/[\w\-._~:/?#\[\]@!$&'()*+,;=%]+/gi;
+  while ((match = absoluteRegex.exec(normalized)) !== null) {
+    addCandidate(match[0]);
+  }
+  const relativeRegex = /["'](\/[A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]+)["']/g;
+  while ((match = relativeRegex.exec(html)) !== null) {
+    const candidate = match[1];
+    if (candidate.startsWith("//")) {
+      addCandidate(`https:${candidate}`);
+    } else if (candidate.startsWith("/")) {
+      addCandidate(candidate);
+    }
+  }
+  return Array.from(links);
+}
+
 async function collectSitemapEntries(url, visited = new Set()) {
   if (visited.has(url)) {
     return [];
@@ -522,7 +639,7 @@ async function collectSitemapEntries(url, visited = new Set()) {
   return entries;
 }
 
-async function collectLinksFromPage(url) {
+async function collectLinksFromPage(url, source) {
   let response;
   try {
     response = await fetchText(url);
@@ -531,16 +648,12 @@ async function collectLinksFromPage(url) {
     return [];
   }
   const html = response.text ?? "";
-  const links = new Set();
-  const regex = /<a[^>]+href=["']([^"']+)["'][^>]*>/gi;
-  let match;
-  while ((match = regex.exec(html)) !== null) {
-    const href = resolveUrl(url, match[1]);
-    if (href) {
-      links.add(href);
-    }
+  const links = extractUrlsFromHtml(html, url);
+  if (!source || !Array.isArray(source.listingPages)) {
+    return links;
   }
-  return Array.from(links);
+  const listingSet = new Set(source.listingPages);
+  return links.filter((link) => !listingSet.has(link));
 }
 
 function filterOfficialUrls(urls, source) {
@@ -700,7 +813,7 @@ async function autoScrollPage(page) {
   }
 }
 
-async function collectLinksWithBrowser(url) {
+async function collectLinksWithBrowser(url, source) {
   const result = await withBrowserPage(async (page) => {
     await page.route("**/*", (route) => {
       const request = route.request();
@@ -713,13 +826,20 @@ async function collectLinksWithBrowser(url) {
     await page.goto(url, { waitUntil: "networkidle" });
     await autoScrollPage(page);
     await page.waitForTimeout(500);
-    const links = await page.evaluate(() => {
+    const anchorLinks = await page.evaluate(() => {
       const anchors = Array.from(document.querySelectorAll('a[href]'));
       return anchors
         .map((anchor) => anchor.href)
         .filter((href) => typeof href === "string" && href.startsWith("http"));
     });
-    return links;
+    const html = await page.content();
+    const embeddedLinks = extractUrlsFromHtml(html, url);
+    const combined = Array.from(new Set([...(anchorLinks ?? []), ...embeddedLinks]));
+    if (!source || !Array.isArray(source.listingPages)) {
+      return combined;
+    }
+    const listingSet = new Set(source.listingPages);
+    return combined.filter((link) => !listingSet.has(link));
   });
   return Array.isArray(result) ? result : [];
 }
@@ -773,12 +893,16 @@ async function gatherOfficialCandidates(source) {
   }
   if (Array.isArray(source.listingPages)) {
     for (const pageUrl of source.listingPages) {
-      const links = await collectLinksFromPage(pageUrl);
+      const links = await collectLinksFromPage(pageUrl, source);
       urlBuckets.push(...links);
     }
   }
   let filtered = filterOfficialUrls(urlBuckets, source);
   let unique = uniqueUrls(filtered);
+  if (Array.isArray(source.listingPages) && source.listingPages.length > 0) {
+    const listingSet = new Set(source.listingPages);
+    unique = unique.filter((link) => !listingSet.has(link));
+  }
 
   const shouldTryBrowser = (source.useBrowser ?? false) || preferBrowserMode || forceBrowserMode;
   if (shouldTryBrowser && Array.isArray(source.listingPages)) {
@@ -790,7 +914,7 @@ async function gatherOfficialCandidates(source) {
       const browserLinks = [];
       for (const pageUrl of source.listingPages) {
         try {
-          const links = await collectLinksWithBrowser(pageUrl);
+          const links = await collectLinksWithBrowser(pageUrl, source);
           browserLinks.push(...links);
         } catch (error) {
           console.warn(
