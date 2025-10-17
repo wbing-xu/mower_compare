@@ -10,8 +10,15 @@ const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 const SEC_CH_UA =
   '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"';
+const IMAGE_ACCEPT_HEADER =
+  "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
+const DOCUMENT_ACCEPT_HEADER =
+  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 const args = new Set(process.argv.slice(2));
 const skipDownload = args.has("--skip-download");
+const skipOfficialScrape = args.has("--skip-official");
+const forceOfficialScrape = args.has("--force-official");
+const effectiveSkipOfficial = skipOfficialScrape || (skipDownload && !forceOfficialScrape);
 
 const LOGO_SOURCES = [
   {
@@ -211,6 +218,35 @@ const LOGO_SOURCES = [
   }
 ];
 
+const OFFICIAL_SOURCES = [
+  {
+    idPrefix: "toro-official",
+    brandName: "Toro",
+    companyId: "toro",
+    divisionId: "toro-turf",
+    categoryId: "toro-official-catalog",
+    seriesId: "toro-official-series",
+    marketPosition: "consumer",
+    powertrain: "ICE",
+    sitemapUrls: ["https://www.toro.com/sitemap.xml", "https://www.toro.com/en/sitemap.xml"],
+    listingPages: ["https://www.toro.com/en/product-catalog"],
+    includePatterns: [/https:\/\/www\.toro\.com\/en\//i],
+    excludePatterns: [
+      /\/dealer/i,
+      /\/owner/i,
+      /\/support/i,
+      /\/customer/i,
+      /\/financing/i,
+      /\/document\//i,
+      /\/manual/i,
+      /\/news/i,
+      /\/sds\//i,
+      /\.pdf$/i
+    ],
+    limit: 120
+  }
+];
+
 function extractArray(content, exportName) {
   const regex = new RegExp(`export const ${exportName}[^=]*=\\s*(\\[[\\s\\S]*?\\n\\]);`);
   const match = content.match(regex);
@@ -223,6 +259,33 @@ function extractArray(content, exportName) {
 
 function escapeForSvg(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function normalizeWhitespace(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.replace(/[\s\u00A0]+/g, " ").trim();
+}
+
+function slugify(value) {
+  const normalized = normalizeWhitespace(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "");
+  return normalized || "item";
+}
+
+function resolveUrl(base, href) {
+  if (!href) {
+    return null;
+  }
+  try {
+    return new URL(href, base).toString();
+  } catch {
+    return null;
+  }
 }
 
 function buildProductPlaceholder(product, palette) {
@@ -253,6 +316,351 @@ function buildProductPlaceholder(product, palette) {
     </foreignObject>
   </g>
 </svg>`;
+}
+
+function extractMetaContent(html, property) {
+  const pattern = new RegExp(
+    `<meta[^>]+property=["']${property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'][^>]*content=["']([^"']+)["'][^>]*>`,
+    "i"
+  );
+  const match = html.match(pattern);
+  return match ? normalizeWhitespace(match[1]) : "";
+}
+
+function extractMetaNameContent(html, name) {
+  const pattern = new RegExp(
+    `<meta[^>]+name=["']${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'][^>]*content=["']([^"']+)["'][^>]*>`,
+    "i"
+  );
+  const match = html.match(pattern);
+  return match ? normalizeWhitespace(match[1]) : "";
+}
+
+function extractTitle(html) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match ? normalizeWhitespace(match[1]) : "";
+}
+
+function extractJsonLdBlocks(html) {
+  const results = [];
+  const regex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const block = match[1]?.trim();
+    if (!block) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(block);
+      if (Array.isArray(parsed)) {
+        results.push(...parsed);
+      } else {
+        results.push(parsed);
+      }
+    } catch {
+      // ignore malformed JSON-LD
+    }
+  }
+  return results;
+}
+
+function pickProductNode(jsonLd) {
+  for (const node of jsonLd) {
+    if (!node) continue;
+    const type = node["@type"];
+    if (typeof type === "string" && type.toLowerCase() === "product") {
+      return node;
+    }
+    if (Array.isArray(type) && type.map((item) => String(item).toLowerCase()).includes("product")) {
+      return node;
+    }
+    if (node.item && typeof node.item === "object") {
+      const nested = pickProductNode([node.item]);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
+function pickOffer(node) {
+  if (!node) {
+    return null;
+  }
+  const offers = node.offers;
+  if (!offers) {
+    return null;
+  }
+  if (Array.isArray(offers)) {
+    return offers.find((offer) => offer && (offer.price || offer.priceSpecification));
+  }
+  return offers;
+}
+
+function parsePriceValue(raw) {
+  if (raw == null) {
+    return null;
+  }
+  const value = typeof raw === "number" ? raw : Number(String(raw).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(value) ? value : null;
+}
+
+async function collectSitemapEntries(url, visited = new Set()) {
+  if (visited.has(url)) {
+    return [];
+  }
+  visited.add(url);
+  let response;
+  try {
+    response = await fetchText(url);
+  } catch (error) {
+    console.warn(`× 获取站点地图 ${url} 失败: ${error.message}`);
+    return [];
+  }
+  const xml = response.text ?? "";
+  const entries = [];
+  if (/<(?:urlset|url)>/i.test(xml)) {
+    const regex = /<loc>([\s\S]*?)<\/loc>/gi;
+    let match;
+    while ((match = regex.exec(xml)) !== null) {
+      const loc = normalizeWhitespace(match[1]);
+      if (loc) {
+        entries.push(loc);
+      }
+    }
+    return entries;
+  }
+  if (/<sitemapindex/i.test(xml)) {
+    const regex = /<loc>([\s\S]*?)<\/loc>/gi;
+    let match;
+    while ((match = regex.exec(xml)) !== null) {
+      const loc = normalizeWhitespace(match[1]);
+      if (loc) {
+        const nested = await collectSitemapEntries(loc, visited);
+        for (const item of nested) {
+          entries.push(item);
+        }
+      }
+    }
+    return entries;
+  }
+  return entries;
+}
+
+async function collectLinksFromPage(url) {
+  let response;
+  try {
+    response = await fetchText(url);
+  } catch (error) {
+    console.warn(`× 打开目录页 ${url} 失败: ${error.message}`);
+    return [];
+  }
+  const html = response.text ?? "";
+  const links = new Set();
+  const regex = /<a[^>]+href=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const href = resolveUrl(url, match[1]);
+    if (href) {
+      links.add(href);
+    }
+  }
+  return Array.from(links);
+}
+
+function filterOfficialUrls(urls, source) {
+  const includePatterns = Array.isArray(source.includePatterns) ? source.includePatterns : [];
+  const excludePatterns = Array.isArray(source.excludePatterns) ? source.excludePatterns : [];
+  return urls.filter((url) => {
+    if (excludePatterns.some((pattern) => pattern.test(url))) {
+      return false;
+    }
+    if (includePatterns.length === 0) {
+      return true;
+    }
+    return includePatterns.some((pattern) => pattern.test(url));
+  });
+}
+
+function uniqueUrls(urls) {
+  const seen = new Set();
+  const result = [];
+  for (const url of urls) {
+    if (!url || seen.has(url)) {
+      continue;
+    }
+    seen.add(url);
+    result.push(url);
+  }
+  return result;
+}
+
+async function gatherOfficialCandidates(source) {
+  const urlBuckets = [];
+  if (Array.isArray(source.sitemapUrls)) {
+    for (const sitemapUrl of source.sitemapUrls) {
+      const entries = await collectSitemapEntries(sitemapUrl);
+      urlBuckets.push(...entries);
+    }
+  }
+  if (Array.isArray(source.listingPages)) {
+    for (const pageUrl of source.listingPages) {
+      const links = await collectLinksFromPage(pageUrl);
+      urlBuckets.push(...links);
+    }
+  }
+  const filtered = filterOfficialUrls(urlBuckets, source);
+  const unique = uniqueUrls(filtered);
+  if (source.limit && unique.length > source.limit) {
+    return unique.slice(0, source.limit);
+  }
+  return unique;
+}
+
+async function delay(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractYear(value) {
+  if (!value) return null;
+  const match = String(value).match(/(\d{4})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  return year >= 1990 && year <= new Date().getFullYear() + 1 ? year : null;
+}
+
+function ensureAbsoluteImage(url, pageUrl) {
+  const resolved = resolveUrl(pageUrl, url);
+  if (!resolved) {
+    return null;
+  }
+  return resolved.replace(/\s/g, "%20");
+}
+
+async function scrapeOfficialProduct(url, source) {
+  let response;
+  try {
+    response = await fetchText(url);
+  } catch (error) {
+    console.warn(`× 访问产品页面 ${url} 失败: ${error.message}`);
+    return null;
+  }
+  const html = response.text ?? "";
+  const jsonLdBlocks = extractJsonLdBlocks(html);
+  const productNode = pickProductNode(jsonLdBlocks);
+  const metaTitle = extractMetaContent(html, "og:title") || extractTitle(html);
+  const nodeName = productNode?.name ? normalizeWhitespace(productNode.name) : "";
+  const modelName = nodeName || metaTitle;
+  if (!modelName) {
+    console.warn(`× 无法解析产品名称: ${url}`);
+    return null;
+  }
+  const metaDescription =
+    productNode?.description ? normalizeWhitespace(productNode.description) : extractMetaContent(html, "og:description") || extractMetaNameContent(html, "description");
+  const imageSources = [];
+  const nodeImage = productNode?.image;
+  if (typeof nodeImage === "string") {
+    imageSources.push(nodeImage);
+  } else if (Array.isArray(nodeImage)) {
+    imageSources.push(...nodeImage.filter((item) => typeof item === "string"));
+  }
+  const metaImage = extractMetaContent(html, "og:image") || extractMetaContent(html, "og:image:url");
+  if (metaImage) {
+    imageSources.push(metaImage);
+  }
+  const coverImage = imageSources
+    .map((value) => ensureAbsoluteImage(value, url))
+    .find((value) => typeof value === "string" && value.startsWith("http"));
+
+  const sku = normalizeWhitespace(productNode?.sku || productNode?.mpn || productNode?.productID || "");
+  const offer = pickOffer(productNode);
+  const price = offer ? parsePriceValue(offer.price ?? offer.priceSpecification?.price) : null;
+  const currency = offer?.priceCurrency || offer?.priceSpecification?.priceCurrency || offer?.priceSpecification?.priceCurrency?.code;
+  const releaseYear = extractYear(productNode?.releaseDate) ?? extractYear(productNode?.productionDate) ?? new Date().getFullYear();
+  const summary = metaDescription || `${source.brandName} ${modelName}`;
+  const slugFromUrl = (() => {
+    try {
+      const parsed = new URL(url);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      return parts.slice(-2).join("-") || parts.slice(-1)[0] || modelName;
+    } catch {
+      return modelName;
+    }
+  })();
+  const id = `${source.idPrefix}-${slugify(slugFromUrl)}`;
+
+  const specs = [];
+  if (coverImage) {
+    specs.push({ definitionId: "product_image", value: coverImage });
+  }
+  specs.push({ definitionId: "official_url", value: url });
+  if (summary) {
+    specs.push({ definitionId: "official_summary", value: summary });
+  }
+  if (sku) {
+    specs.push({ definitionId: "official_sku", value: sku });
+  }
+  if (price != null) {
+    specs.push({ definitionId: "official_price", value: price, unit: typeof currency === "string" ? currency : undefined });
+  }
+  if (offer?.availability) {
+    specs.push({ definitionId: "market_availability", value: normalizeWhitespace(offer.availability) });
+  }
+
+  const product = {
+    id,
+    modelName,
+    sku: sku || undefined,
+    coverImage: coverImage || "",
+    companyId: source.companyId,
+    divisionId: source.divisionId,
+    categoryId: source.categoryId,
+    seriesId: source.seriesId,
+    brandName: source.brandName,
+    marketPosition: source.marketPosition,
+    powertrain: source.powertrain,
+    releaseYear,
+    status: "active",
+    summary,
+    priceRange: price != null ? [price, price] : undefined,
+    specs
+  };
+
+  if (typeof source.transform === "function") {
+    return source.transform(product, { url, productNode, metaDescription, coverImage, sku, price, currency }) ?? product;
+  }
+  return product;
+}
+
+async function collectOfficialProducts() {
+  if (!Array.isArray(OFFICIAL_SOURCES) || OFFICIAL_SOURCES.length === 0) {
+    return [];
+  }
+  const results = [];
+  for (const source of OFFICIAL_SOURCES) {
+    console.log(`开始抓取 ${source.brandName} 官网数据…`);
+    let urls = [];
+    try {
+      urls = await gatherOfficialCandidates(source);
+    } catch (error) {
+      console.warn(`× 收集 ${source.brandName} 目录失败: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+    console.log(`找到 ${urls.length} 个候选页面，逐条解析…`);
+    let success = 0;
+    for (const url of urls) {
+      const product = await scrapeOfficialProduct(url, source);
+      if (product) {
+        results.push(product);
+        success += 1;
+      }
+      const wait = 400 + Math.random() * 600;
+      await delay(wait);
+    }
+    console.log(`完成 ${source.brandName} 抓取，成功 ${success} 条。`);
+  }
+  return results;
 }
 
 function buildLogoPlaceholder(label) {
@@ -444,28 +852,37 @@ function collectHeaderScenarios(url) {
   return scenarios;
 }
 
-function buildHeaderSets(url) {
+function buildHeaderSets(url, options = {}) {
+  const { accept = IMAGE_ACCEPT_HEADER, fetchDest = "image", fetchMode = "no-cors", includeUpgrade = fetchDest === "document", extraHeaders = [] } = options;
   const scenarios = collectHeaderScenarios(url);
   const headerSets = [];
   const seen = new Set();
   for (const scenario of scenarios) {
     const headers = [
       ["user-agent", USER_AGENT],
-      ["accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"],
+      ["accept", accept],
       ["accept-language", "en-US,en;q=0.9,zh-CN;q=0.8"],
       ["cache-control", "no-cache"],
       ["pragma", "no-cache"],
       ["sec-ch-ua", SEC_CH_UA],
       ["sec-ch-ua-mobile", "?0"],
       ["sec-ch-ua-platform", '"Windows"'],
-      ["sec-fetch-dest", "image"],
-      ["sec-fetch-mode", "no-cors"],
+      ["sec-fetch-dest", fetchDest],
+      ["sec-fetch-mode", fetchMode],
       ["sec-fetch-site", scenario.site],
-      ["upgrade-insecure-requests", "1"],
       ["dnt", "1"]
     ];
+    if (includeUpgrade) {
+      headers.push(["upgrade-insecure-requests", "1"]);
+    }
+    if (fetchDest === "document") {
+      headers.push(["sec-fetch-user", "?1"]);
+    }
     if (scenario.referer) {
       headers.push(["referer", scenario.referer]);
+    }
+    for (const [name, value] of extraHeaders) {
+      headers.push([name, value]);
     }
     const key = headers.map(([name, value]) => `${name}:${value}`).join("| ");
     if (!seen.has(key)) {
@@ -512,8 +929,32 @@ function parseCurlOutput(buffer) {
   return { status, body, contentType };
 }
 
-async function fetchBinary(url) {
-  const headerSets = buildHeaderSets(url);
+function detectCharset(contentType) {
+  if (!contentType) {
+    return "utf-8";
+  }
+  const match = contentType.match(/charset=([^;]+)/i);
+  if (!match) {
+    return "utf-8";
+  }
+  const charset = match[1].trim().toLowerCase();
+  if (!charset) {
+    return "utf-8";
+  }
+  return charset;
+}
+
+function decodeBuffer(buffer, contentType) {
+  const charset = detectCharset(contentType);
+  try {
+    return buffer.toString(charset === "utf-8" ? "utf-8" : charset);
+  } catch {
+    return buffer.toString("utf-8");
+  }
+}
+
+async function fetchResource(url, { accept = IMAGE_ACCEPT_HEADER, binary = false, headerOptions = {} } = {}) {
+  const headerSets = buildHeaderSets(url, { accept, ...headerOptions });
   let lastError = null;
   for (const headers of headerSets) {
     const args = [
@@ -552,9 +993,29 @@ async function fetchBinary(url) {
       lastError = new Error(`HTTP ${parsed.status}`);
       continue;
     }
-    return { buffer: parsed.body, contentType: parsed.contentType };
+    if (binary) {
+      return { buffer: parsed.body, contentType: parsed.contentType };
+    }
+    const text = decodeBuffer(parsed.body, parsed.contentType);
+    return { buffer: parsed.body, contentType: parsed.contentType, text };
   }
   throw lastError ?? new Error("curl 调用失败");
+}
+
+async function fetchBinary(url) {
+  return fetchResource(url, {
+    binary: true,
+    accept: IMAGE_ACCEPT_HEADER,
+    headerOptions: { fetchDest: "image", fetchMode: "no-cors", includeUpgrade: false }
+  });
+}
+
+async function fetchText(url) {
+  return fetchResource(url, {
+    binary: false,
+    accept: DOCUMENT_ACCEPT_HEADER,
+    headerOptions: { fetchDest: "document", fetchMode: "navigate", includeUpgrade: true }
+  });
 }
 
 async function writeIfChanged(filePath, data) {
@@ -647,6 +1108,26 @@ async function syncProductImages(products) {
   console.log(`已生成产品图片清单，共 ${Object.keys(sortedManifest).length} 项`);
 }
 
+function mergeProducts(base, additions) {
+  const result = [];
+  const seen = new Set();
+  for (const item of base) {
+    if (item?.id && !seen.has(item.id)) {
+      result.push(item);
+      seen.add(item.id);
+    }
+  }
+  const extras = [];
+  for (const item of additions) {
+    if (item?.id && !seen.has(item.id)) {
+      extras.push(item);
+      seen.add(item.id);
+    }
+  }
+  extras.sort((a, b) => a.id.localeCompare(b.id));
+  return result.concat(extras);
+}
+
 async function syncLogos() {
   const logoDir = path.join(process.cwd(), "public", "logos");
   await ensureDir(logoDir);
@@ -694,7 +1175,18 @@ async function main() {
   const sourcePath = path.join(process.cwd(), "data", "mock-products.ts");
   const output = path.join(process.cwd(), "data", "imported-products.json");
   const raw = await fs.readFile(sourcePath, "utf-8");
-  const products = extractArray(raw, "mockProducts");
+  const mockProducts = extractArray(raw, "mockProducts");
+  let officialProducts = [];
+  if (effectiveSkipOfficial) {
+    console.log(
+      skipOfficialScrape
+        ? "已跳过官网数据抓取 (--skip-official)"
+        : "检测到 --skip-download，默认跳过官网抓取。若需要同步官网数据请添加 --force-official。"
+    );
+  } else {
+    officialProducts = await collectOfficialProducts();
+  }
+  const products = mergeProducts(mockProducts, officialProducts);
   await fs.mkdir(path.dirname(output), { recursive: true });
   await fs.writeFile(output, JSON.stringify(products, null, 2), "utf-8");
   console.log(`已写入 ${products.length} 条产品到 ${output}`);
