@@ -1,7 +1,4 @@
-import { mockProducts } from "@/data/mock-products";
 import { type Company } from "@/types/domain";
-
-const productMap = new Map(mockProducts.map((product) => [product.id, product]));
 
 export const mockCompanies: Company[] = [
   {
@@ -13,11 +10,11 @@ export const mockCompanies: Company[] = [
     website: "https://www.thetorocompany.com/",
     logo: "/logos/toro.svg",
     description:
-      "Toro Company 致力于园林机械、灌溉系统与场地管理解决方案，在零转割草、机器人割草、专业园林设备等领域拥有广泛产品线。",
+      "Toro Company 致力于园林机械、灌溉系统与场地管理解决方案，在零转割草、机器人割草、地下施工及除雪等领域拥有广泛产品线。",
     tags: ["上市公司", "乘骑式", "园林", "商用"],
     highlights: [
       "零转割草平台市场份额领先",
-      "收购 Exmark、Ventrac 等高端品牌",
+      "收购 Ditch Witch / Boss Snowplow / Hayter 等品牌",
       "在自治割草与互联平台持续投入"
     ],
     divisions: [
@@ -29,14 +26,58 @@ export const mockCompanies: Company[] = [
         children: [
           {
             id: "toro-exmark-zero-turn",
-            name: "乘骑式/零转",
+            name: "乘骑式零转平台",
             taxonomyPath: ["乘骑式", "零转"],
             children: [
-              {
-                id: "toro-lazer-z",
-                name: "Lazer Z 系列",
-                products: [productMap.get("toro-lazerz-x")!]
-              }
+              { id: "toro-lazer-z", name: "Lazer Z 系列" }
+            ]
+          }
+        ]
+      },
+      {
+        id: "toro-ditch-witch",
+        name: "Ditch Witch",
+        type: "brand",
+        description: "地下施工与多功能立乘式设备",
+        children: [
+          {
+            id: "ditch-witch-stand-on",
+            name: "立乘式工具载具",
+            taxonomyPath: ["施工设备", "多用途"],
+            children: [
+              { id: "ditch-witch-sk-series", name: "SK 立乘系列" }
+            ]
+          }
+        ]
+      },
+      {
+        id: "toro-boss-snowplow",
+        name: "BOSS Snowplow",
+        type: "brand",
+        description: "全季节除雪与道路维护平台",
+        children: [
+          {
+            id: "boss-snow-removal",
+            name: "除雪机器人与设备",
+            taxonomyPath: ["特种设备", "除雪"],
+            children: [
+              { id: "boss-srx-series", name: "SRX 履带系列" }
+            ]
+          }
+        ]
+      },
+      {
+        id: "toro-hayter",
+        name: "Hayter",
+        type: "brand",
+        description: "高端住宅与庄园割草解决方案",
+        children: [
+          {
+            id: "hayter-robotic",
+            name: "自治割草机器人",
+            taxonomyPath: ["机器人", "高端住宅"],
+            children: [
+              { id: "hayter-oaspire", name: "Osprey Autonomous" }
             ]
           }
         ]
@@ -70,11 +111,7 @@ export const mockCompanies: Company[] = [
             name: "Ceora 机器人系统",
             taxonomyPath: ["机器人", "商用"],
             children: [
-              {
-                id: "ceora-544",
-                name: "Ceora 544",
-                products: [productMap.get("husqvarna-ceora-544")!]
-              }
+              { id: "ceora-544", name: "Ceora 544" }
             ]
           }
         ]
@@ -101,17 +138,14 @@ export const mockCompanies: Company[] = [
         id: "ego-riding",
         name: "Riding & Zero-Turn",
         type: "division",
+        description: "乘骑式与零转电动平台",
         children: [
           {
             id: "ego-zero-turn",
             name: "电动零转",
             taxonomyPath: ["乘骑式", "电动"],
             children: [
-              {
-                id: "ego-z6",
-                name: "Z6 系列",
-                products: [productMap.get("ego-power-z6")!]
-              }
+              { id: "ego-z6", name: "Z6 系列" }
             ]
           }
         ]
@@ -138,17 +172,14 @@ export const mockCompanies: Company[] = [
         id: "kubota-turf",
         name: "Kubota Turf",
         type: "division",
+        description: "草坪与园林事业部",
         children: [
           {
             id: "kubota-zero-turn",
             name: "零转割草平台",
             taxonomyPath: ["乘骑式", "零转"],
             children: [
-              {
-                id: "kubota-zd",
-                name: "ZD 系列",
-                products: [productMap.get("kubota-zd1511")!]
-              }
+              { id: "kubota-zd", name: "ZD 系列" }
             ]
           }
         ]

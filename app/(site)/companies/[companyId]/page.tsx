@@ -1,20 +1,18 @@
 import { notFound } from "next/navigation";
-import { mockCompanies } from "@/data/mock-companies";
 import { ProductTree } from "@/components/products/product-tree";
 import { CompareBar } from "@/components/compare/compare-bar";
+import { getCompanyWithMatrix } from "@/lib/server/companies";
 
 interface CompanyPageProps {
   params: { companyId: string };
 }
 
-export default function CompanyPage({ params }: CompanyPageProps) {
-  const company = mockCompanies.find((item) => item.id === params.companyId);
+export default async function CompanyPage({ params }: CompanyPageProps) {
+  const currentCompany = await getCompanyWithMatrix(params.companyId);
 
-  if (!company) {
+  if (!currentCompany) {
     notFound();
   }
-
-  const currentCompany = company;
 
   return (
     <div className="space-y-10">

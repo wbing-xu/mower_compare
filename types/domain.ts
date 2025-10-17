@@ -7,6 +7,27 @@ export type CompanyTag =
   | "商用"
   | "民用";
 
+export interface SeriesDefinition {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ProductCategoryDefinition {
+  id: string;
+  name: string;
+  taxonomyPath: string[];
+  children: SeriesDefinition[];
+}
+
+export interface DivisionDefinition {
+  id: string;
+  name: string;
+  type: "brand" | "division";
+  description?: string;
+  children: ProductCategoryDefinition[];
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -18,30 +39,20 @@ export interface Company {
   logo: string;
   description: string;
   tags: CompanyTag[];
-  divisions: Division[];
+  divisions: DivisionDefinition[];
   highlights: string[];
 }
 
-export interface Division {
-  id: string;
-  name: string;
-  type: "brand" | "division";
-  description?: string;
-  children: ProductCategory[];
-}
-
-export interface ProductCategory {
-  id: string;
-  name: string;
-  taxonomyPath: string[];
-  children: Series[];
-}
-
-export interface Series {
-  id: string;
-  name: string;
-  description?: string;
+export interface SeriesNode extends SeriesDefinition {
   products: ProductSummary[];
+}
+
+export interface ProductCategoryNode extends ProductCategoryDefinition {
+  children: SeriesNode[];
+}
+
+export interface DivisionNode extends DivisionDefinition {
+  children: ProductCategoryNode[];
 }
 
 export type MarketPosition = "consumer" | "prosumer" | "professional" | "municipal";
@@ -52,6 +63,11 @@ export interface ProductSummary {
   modelName: string;
   sku?: string;
   coverImage: string;
+  companyId: string;
+  divisionId: string;
+  categoryId: string;
+  seriesId: string;
+  brandName?: string;
   marketPosition: MarketPosition;
   powertrain: Powertrain;
   releaseYear: number;
@@ -62,15 +78,21 @@ export interface ProductSummary {
 }
 
 export type SpecGroup =
+  | "media"
   | "basic"
+  | "mechanical"
   | "dimensions"
   | "deck"
+  | "performance"
+  | "mobility"
   | "power"
   | "battery"
-  | "drive"
   | "sensing"
+  | "software"
+  | "environment"
   | "safety"
   | "maintenance"
+  | "certification"
   | "market";
 
 export interface SpecDefinition {

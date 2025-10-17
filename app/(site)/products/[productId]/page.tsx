@@ -1,16 +1,16 @@
 import { notFound } from "next/navigation";
-import { mockProducts } from "@/data/mock-products";
 import { specDictionary, specGroups } from "@/data/specs-dictionary";
 import { formatRange } from "@/lib/utils";
 import { CompareBar } from "@/components/compare/compare-bar";
 import { CompareCTA } from "@/components/compare/compare-cta";
+import { loadProductById } from "@/lib/server/products";
 
 interface ProductPageProps {
   params: { productId: string };
 }
 
-export default function ProductPage({ params }: ProductPageProps) {
-  const product = mockProducts.find((item) => item.id === params.productId);
+export default async function ProductPage({ params }: ProductPageProps) {
+  const product = await loadProductById(params.productId);
 
   if (!product) {
     notFound();

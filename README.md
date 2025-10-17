@@ -5,10 +5,10 @@
 ## ✨ 功能概览
 
 - **公司目录**：以品牌卡片呈现行业玩家，支持标签与搜索。
-- **公司详情**：展示树状产品矩阵、关键指标与代表型号。
-- **产品总览**：按用途/动力等筛选维度展示型号卡片。
-- **对比分析**：勾选型号进入对比栏，高亮差异、折叠相同项。
-- **CMS 入口**：规划内容模型、导入流程与版本管理的操作面板。
+- **公司详情**：展示 Toro → Exmark/Ditch Witch/BOSS/Hayter 等多级树状产品矩阵，自动合并导入数据。
+- **产品总览**：按用途/动力/割幅等筛选型号卡片，结合导入数据实时刷新。
+- **对比分析**：勾选型号进入对比栏，高亮差异、折叠相同项，覆盖机械/导航/软件/环境等分组字段。
+- **CMS 入口**：提供 CSV / JSON 产品导入工具，使用 `pudu / pudu` 账号向 `/api/import` 写入数据。
 
 > 当前实现基于静态示例数据，重点呈现信息架构与交互流程，后续可通过 Prisma + PostgreSQL/NestJS 等方案接入真实数据源。
 
@@ -27,8 +27,12 @@
 │   │   ├── companies
 │   │   │   └── [companyId]
 │   │   ├── compare
+│   │   ├── products
 │   │   ├── layout.tsx
 │   │   └── page.tsx
+│   ├── api
+│   │   ├── import
+│   │   └── products
 │   ├── cms
 │   │   ├── import
 │   │   ├── layout.tsx
@@ -46,8 +50,10 @@
 │   ├── mock-products.ts
 │   └── specs-dictionary.ts
 ├── lib
-│   ├── filters.ts
-│   └── format.ts
+│   ├── server
+│   │   ├── companies.ts
+│   │   └── products.ts
+│   └── utils.ts
 ├── public
 │   └── logos
 └── types
@@ -66,12 +72,44 @@
    ```
 3. 打开浏览器访问 `http://localhost:3000` 即可查看示例站点。
 
+## 📥 导入接口（演示）
+
+- **接口地址**：`POST /api/import`
+- **认证方式**：Basic Auth，默认 `pudu / pudu`
+- **请求示例**：
+
+  ```json
+  {
+    "products": [
+      {
+        "id": "demo-001",
+        "modelName": "示例机器人",
+        "companyId": "toro",
+        "divisionId": "toro-hayter",
+        "categoryId": "hayter-robotic",
+        "seriesId": "hayter-oaspire",
+        "marketPosition": "prosumer",
+        "powertrain": "Robot",
+        "summary": "演示数据",
+        "specs": {
+          "cutting_width": "55||cm",
+          "runtime": "120 分钟",
+          "navigation_obstacle": "激光雷达"
+        }
+      }
+    ]
+  }
+  ```
+
+- **CSV 规则**：字段名与 `specs-dictionary.ts` 中的 `key` 对应；如需附带单位可使用 `值||单位` 格式。
+
+导入成功后，数据将写入 `data/imported-products.json`，同时影响产品目录、公司矩阵与对比页的展示。
+
 ## 📦 后续计划
 
 - 接入 Prisma ORM + PostgreSQL，实现公司/产品/参数的可持久化存储。
-- 构建 CMS 端数据录入表单、批量导入流程与版本管理。
+- 扩展 CMS 表单、版本管理与权限审计流程。
 - 增强对比导出能力（CSV/PDF/PNG）与国际化（中英双语、单位换算）。
-- 集成鉴权与权限（Admin/Editor/Viewer）、审计日志。
 
 ## 📝 许可证
 

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { mockCompanies } from "@/data/mock-companies";
-import { mockProducts } from "@/data/mock-products";
 import { formatCurrency } from "@/lib/utils";
+import { loadAllProducts } from "@/lib/server/products";
 
-export default function HomePage() {
+export default async function HomePage() {
   const featuredCompanies = mockCompanies.slice(0, 3);
-  const featuredProducts = mockProducts.slice(0, 3);
+  const allProducts = await loadAllProducts();
+  const featuredProducts = allProducts.slice(0, 3);
 
   return (
     <div className="flex flex-col gap-12">
@@ -40,7 +41,7 @@ export default function HomePage() {
             </div>
             <div className="rounded-2xl bg-slate-100 p-4">
               <dt className="text-xs text-slate-500">覆盖型号</dt>
-              <dd className="mt-2 text-2xl font-semibold text-slate-800">{mockProducts.length * 5}+</dd>
+              <dd className="mt-2 text-2xl font-semibold text-slate-800">{allProducts.length * 5}+</dd>
             </div>
             <div className="rounded-2xl bg-slate-100 p-4">
               <dt className="text-xs text-slate-500">参数字段</dt>

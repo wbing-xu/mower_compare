@@ -1,18 +1,21 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { CompareTable } from "@/components/compare/compare-table";
 import { CompareBar } from "@/components/compare/compare-bar";
-import { mockProducts } from "@/data/mock-products";
+import { loadAllProducts, loadProductsByIds } from "@/lib/server/products";
 
 interface ComparePageProps {
   searchParams: { ids?: string };
 }
 
-function CompareContent({ searchParams }: ComparePageProps) {
+export default async function ComparePage({ searchParams }: ComparePageProps) {
   const ids = searchParams.ids?.split(",").filter(Boolean);
-  const products = ids && ids.length > 0
-    ? mockProducts.filter((product) => ids.includes(product.id))
-    : mockProducts.slice(0, 3);
+  let products = [];
+  if (ids && ids.length > 0) {
+    products = await loadProductsByIds(ids);
+  } else {
+    const all = await loadAllProducts();
+    products = all.slice(0, 3);
+  }
 
   if (products.length === 0) {
     redirect("/products");
@@ -30,14 +33,6 @@ function CompareContent({ searchParams }: ComparePageProps) {
       <CompareTable products={products} />
       <CompareBar />
     </div>
-  );
-}
-
-export default function ComparePage(props: ComparePageProps) {
-  return (
-    <Suspense fallback={<div>加载中...</div>}>
-      <CompareContent {...props} />
-    </Suspense>
   );
 }
 

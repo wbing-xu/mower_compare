@@ -1,0 +1,6 @@
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <rect width="120" height="120" rx="20" fill="#0B3D2E"/>
+  <circle cx="60" cy="50" r="20" stroke="#9FE870" stroke-width="6"/>
+  <path d="M45 85h30v10H45z" fill="#9FE870"/>
+  <text x="60" y="105" fill="white" font-family="Arial, sans-serif" font-weight="bold" font-size="18" text-anchor="middle">Hayter</text>
+</svg>

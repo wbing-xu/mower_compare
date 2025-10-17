@@ -4,12 +4,8 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, CopyPlus } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { type ProductSummary, type Series } from "@/types/domain";
+import { type ProductSummary, type SeriesNode } from "@/types/domain";
 import { useCompareStore } from "@/components/compare/use-compare-store";
-
-interface TreeNodeProps {
-  series: Series;
-}
 
 function ProductNode({ product }: { product: ProductSummary }) {
   const { toggleProduct, isSelected } = useCompareStore();
@@ -18,11 +14,12 @@ function ProductNode({ product }: { product: ProductSummary }) {
   return (
     <li className="rounded-2xl bg-white p-4 shadow-card">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-slate-800">{product.modelName}</p>
-          <p className="mt-1 text-xs text-slate-500">
-            {product.powertrain} · {product.marketPosition} · {product.releaseYear}
-          </p>
+      <div>
+        <p className="text-sm font-semibold text-slate-800">{product.modelName}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {product.brandName ? `${product.brandName} · ` : ""}
+          {product.powertrain} · {product.marketPosition} · {product.releaseYear}
+        </p>
           <p className="mt-2 text-xs text-slate-600 line-clamp-3">{product.summary}</p>
         </div>
         <button
@@ -51,7 +48,7 @@ function ProductNode({ product }: { product: ProductSummary }) {
   );
 }
 
-function SeriesNode({ series }: TreeNodeProps) {
+function SeriesBranch({ series }: { series: SeriesNode }) {
   const [expanded, setExpanded] = useState(true);
   return (
     <li>
@@ -74,11 +71,11 @@ function SeriesNode({ series }: TreeNodeProps) {
   );
 }
 
-export function ProductTree({ seriesList }: { seriesList: Series[] }) {
+export function ProductTree({ seriesList }: { seriesList: SeriesNode[] }) {
   return (
     <ul className="space-y-4">
       {seriesList.map((series) => (
-        <SeriesNode key={series.id} series={series} />
+        <SeriesBranch key={series.id} series={series} />
       ))}
     </ul>
   );
