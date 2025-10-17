@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { mockCompanies } from "@/data/mock-companies";
 import { productFilters } from "@/data/mock-products";
 import { CompareBar } from "@/components/compare/compare-bar";
 import { CompareCTA } from "@/components/compare/compare-cta";
@@ -14,16 +15,90 @@ const filterDefaults = {
   cuttingWidth: [0, 220] as [number, number]
 };
 
+const companyNameMap = new Map(mockCompanies.map((company) => [company.id, company.name ?? company.shortName ?? company.id]));
+
+function getBrandKey(product: ProductSummary) {
+  const brandLabel = product.brandName ?? "未标注品牌";
+  return `${product.companyId ?? "unknown"}::${brandLabel}`;
+}
+
 type FilterState = typeof filterDefaults;
 
 type MultiKey = "powertrain" | "marketPosition";
 type RangeKey = "releaseYear" | "cuttingWidth";
+type CatalogKey = "companies" | "brands" | "products";
 
 export function ProductCatalog({ products }: { products: ProductSummary[] }) {
   const [filters, setFilters] = useState<FilterState>(filterDefaults);
+  const [catalogFilters, setCatalogFilters] = useState({
+    companies: new Set<string>(),
+    brands: new Set<string>(),
+    products: new Set<string>()
+  });
+
+  const catalogTree = useMemo(() => {
+    const companyBuckets = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        brands: Map<
+          string,
+          {
+            id: string;
+            name: string;
+            products: ProductSummary[];
+          }
+        >;
+      }
+    >();
+
+    for (const product of products) {
+      const companyId = product.companyId ?? "unknown";
+      const companyName = companyNameMap.get(companyId) ?? product.brandName ?? "未标注公司";
+      let companyEntry = companyBuckets.get(companyId);
+      if (!companyEntry) {
+        companyEntry = { id: companyId, name: companyName, brands: new Map() };
+        companyBuckets.set(companyId, companyEntry);
+      }
+
+      const brandLabel = product.brandName ?? "未标注品牌";
+      const brandId = getBrandKey(product);
+      let brandEntry = companyEntry.brands.get(brandId);
+      if (!brandEntry) {
+        brandEntry = { id: brandId, name: brandLabel, products: [] };
+        companyEntry.brands.set(brandId, brandEntry);
+      }
+
+      brandEntry.products.push(product);
+    }
+
+    return Array.from(companyBuckets.values())
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((company) => ({
+        ...company,
+        brands: Array.from(company.brands.values())
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((brand) => ({
+            ...brand,
+            products: brand.products.slice().sort((a, b) => a.modelName.localeCompare(b.modelName))
+          }))
+      }));
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
+      if (catalogFilters.products.size && !catalogFilters.products.has(product.id)) {
+        return false;
+      }
+      const brandKey = getBrandKey(product);
+      if (catalogFilters.brands.size && !catalogFilters.brands.has(brandKey)) {
+        return false;
+      }
+      const companyKey = product.companyId ?? "unknown";
+      if (catalogFilters.companies.size && !catalogFilters.companies.has(companyKey)) {
+        return false;
+      }
       if (filters.powertrain.size && !filters.powertrain.has(product.powertrain)) {
         return false;
       }
@@ -41,7 +116,7 @@ export function ProductCatalog({ products }: { products: ProductSummary[] }) {
       }
       return true;
     });
-  }, [products, filters]);
+  }, [products, filters, catalogFilters]);
 
   const handleToggleMulti = (id: MultiKey, value: string) => {
     setFilters((prev) => {
@@ -55,6 +130,26 @@ export function ProductCatalog({ products }: { products: ProductSummary[] }) {
     setFilters((prev) => ({ ...prev, [id]: value }));
   };
 
+  const handleToggleCatalog = (id: CatalogKey, value: string) => {
+    setCatalogFilters((prev) => {
+      const next = new Set(prev[id]);
+      next.has(value) ? next.delete(value) : next.add(value);
+      return { ...prev, [id]: next };
+    });
+  };
+
+  const handleResetCatalog = () => {
+    setCatalogFilters({
+      companies: new Set<string>(),
+      brands: new Set<string>(),
+      products: new Set<string>()
+    });
+  };
+
+  const hasCatalogSelection = useMemo(() => {
+    return catalogFilters.companies.size + catalogFilters.brands.size + catalogFilters.products.size > 0;
+  }, [catalogFilters]);
+
   return (
     <div className="space-y-10">
       <header className="flex flex-col gap-3">
@@ -67,6 +162,91 @@ export function ProductCatalog({ products }: { products: ProductSummary[] }) {
 
       <section className="grid gap-6 lg:grid-cols-[0.32fr,0.68fr]">
         <aside className="space-y-6">
+          <div className="rounded-3xl bg-white p-6 shadow-card">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-semibold text-slate-700">公司 / 品牌 / 型号</p>
+              <button
+                type="button"
+                onClick={handleResetCatalog}
+                disabled={!hasCatalogSelection}
+                className={cn(
+                  "text-xs font-medium transition",
+                  hasCatalogSelection
+                    ? "text-brand-600 hover:text-brand-700"
+                    : "cursor-not-allowed text-slate-300"
+                )}
+              >
+                重置
+              </button>
+            </div>
+            <div className="mt-4 space-y-4">
+              {catalogTree.map((company) => {
+                const companySelected = catalogFilters.companies.has(company.id);
+                return (
+                  <div key={company.id} className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleCatalog("companies", company.id)}
+                      className={cn(
+                        "w-full rounded-2xl border px-3 py-2 text-left text-xs font-medium transition",
+                        companySelected
+                          ? "border-brand-600 bg-brand-50 text-brand-700"
+                          : "border-slate-200 text-slate-600 hover:border-brand-300"
+                      )}
+                    >
+                      {company.name}
+                    </button>
+                    <div className="space-y-2 border-l border-slate-100 pl-4">
+                      {company.brands.map((brand) => {
+                        const brandSelected = catalogFilters.brands.has(brand.id);
+                        return (
+                          <div key={brand.id} className="space-y-1">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCatalog("brands", brand.id)}
+                              className={cn(
+                                "w-full rounded-xl border px-3 py-2 text-left text-xs font-medium transition",
+                                brandSelected
+                                  ? "border-brand-500 bg-brand-50 text-brand-700"
+                                  : "border-slate-200 text-slate-500 hover:border-brand-300"
+                              )}
+                            >
+                              {brand.name}
+                            </button>
+                            <div className="space-y-1 pl-3">
+                              {brand.products.map((product) => {
+                                const productSelected = catalogFilters.products.has(product.id);
+                                return (
+                                  <button
+                                    key={product.id}
+                                    type="button"
+                                    onClick={() => handleToggleCatalog("products", product.id)}
+                                    className={cn(
+                                      "block w-full rounded-lg px-3 py-1.5 text-left text-[11px] transition",
+                                      productSelected
+                                        ? "bg-brand-100 text-brand-700"
+                                        : "text-slate-500 hover:bg-brand-50 hover:text-brand-600"
+                                    )}
+                                  >
+                                    {product.modelName}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+              {catalogTree.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+                  暂无可用的品牌目录
+                </p>
+              ) : null}
+            </div>
+          </div>
           {productFilters.map((filter) => (
             <div key={filter.id} className="rounded-3xl bg-white p-6 shadow-card">
               <p className="text-sm font-semibold text-slate-700">{filter.label}</p>

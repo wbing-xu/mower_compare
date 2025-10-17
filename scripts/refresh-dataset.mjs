@@ -1,50 +1,208 @@
 import { promises as fs } from "fs";
+import { createHash } from "crypto";
 import path from "path";
 
-const USER_AGENT = "mower-compare-asset-sync/1.0 (+https://example.com)";
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 const args = new Set(process.argv.slice(2));
 const skipDownload = args.has("--skip-download");
 
 const LOGO_SOURCES = [
-  { slug: "stanley-black-decker", label: "Stanley Black & Decker", url: "https://upload.wikimedia.org/wikipedia/commons/6/67/Stanley_Black_%26_Decker_logo.svg" },
-  { slug: "stanley", label: "Stanley", url: "https://upload.wikimedia.org/wikipedia/commons/4/4d/Stanley_logo.svg" },
-  { slug: "craftsman", label: "Craftsman", url: "https://upload.wikimedia.org/wikipedia/commons/7/7a/Craftsman_logo.svg" },
-  { slug: "mtd-holdings", label: "MTD Holdings", url: "https://upload.wikimedia.org/wikipedia/commons/0/0e/MTD_Products_logo.svg" },
-  { slug: "mtd", label: "MTD", url: "https://upload.wikimedia.org/wikipedia/commons/0/0e/MTD_Products_logo.svg" },
-  { slug: "mtd-professional", label: "MTD Professional", url: "https://upload.wikimedia.org/wikipedia/commons/0/0e/MTD_Products_logo.svg" },
-  { slug: "husqvarna-group", label: "Husqvarna Group", url: "https://upload.wikimedia.org/wikipedia/commons/7/76/Husqvarna_logo.svg" },
-  { slug: "husqvarna", label: "Husqvarna", url: "https://upload.wikimedia.org/wikipedia/commons/7/76/Husqvarna_logo.svg" },
-  { slug: "john-deere", label: "John Deere", url: "https://upload.wikimedia.org/wikipedia/en/2/21/John_Deere_logo.svg" },
-  { slug: "toro", label: "Toro", url: "https://upload.wikimedia.org/wikipedia/commons/3/36/Toro_logo.svg" },
-  { slug: "exmark", label: "Exmark", url: "https://upload.wikimedia.org/wikipedia/commons/2/2b/Exmark_logo.svg" },
-  { slug: "ariensco", label: "AriensCo", url: "https://upload.wikimedia.org/wikipedia/en/a/a5/Ariens_Company_logo.svg" },
-  { slug: "ariens", label: "Ariens", url: "https://upload.wikimedia.org/wikipedia/en/a/a5/Ariens_Company_logo.svg" },
-  { slug: "gravely", label: "Gravely", url: "https://upload.wikimedia.org/wikipedia/commons/2/25/Gravely_logo.svg" },
-  { slug: "stiga-group", label: "Stiga Group", url: "https://upload.wikimedia.org/wikipedia/commons/c/c1/Stiga_logo.svg" },
-  { slug: "stiga", label: "Stiga", url: "https://upload.wikimedia.org/wikipedia/commons/c/c1/Stiga_logo.svg" },
-  { slug: "swisher", label: "Swisher", url: "https://upload.wikimedia.org/wikipedia/commons/a/a4/Swisher_logo.png" },
-  { slug: "doosan-bobcat", label: "Doosan Bobcat", url: "https://upload.wikimedia.org/wikipedia/commons/6/6a/Bobcat_company_logo.svg" },
-  { slug: "bobcat", label: "Bobcat", url: "https://upload.wikimedia.org/wikipedia/commons/6/6a/Bobcat_company_logo.svg" },
-  { slug: "greenworks", label: "Greenworks", url: "https://upload.wikimedia.org/wikipedia/commons/4/41/Greenworks_logo.svg" },
-  { slug: "tti", label: "TTI", url: "https://upload.wikimedia.org/wikipedia/commons/b/bd/Techtronic_Industries_logo.svg" },
-  { slug: "ryobi", label: "Ryobi", url: "https://upload.wikimedia.org/wikipedia/commons/b/b8/Ryobi_logo.svg" },
-  { slug: "chervon", label: "Chervon", url: "https://upload.wikimedia.org/wikipedia/commons/9/99/Chervon_logo.svg" },
-  { slug: "ego", label: "EGO", url: "https://upload.wikimedia.org/wikipedia/commons/3/34/EGO_Power%2B_logo.svg" },
-  { slug: "scag", label: "Scag", url: "https://upload.wikimedia.org/wikipedia/en/2/2f/Scag_Power_Equipment_logo.png" },
-  { slug: "wright", label: "Wright", url: "https://upload.wikimedia.org/wikipedia/en/9/93/Wright_Manufacturing_logo.png" },
-  { slug: "mean-green", label: "Mean Green", url: "https://upload.wikimedia.org/wikipedia/commons/0/0a/Mean_Green_Mowers_logo.png" },
-  { slug: "stihl", label: "Stihl", url: "https://upload.wikimedia.org/wikipedia/commons/8/82/Stihl_logo.svg" },
-  { slug: "textron", label: "Textron", url: "https://upload.wikimedia.org/wikipedia/commons/5/5c/Textron_logo.svg" },
-  { slug: "jacobsen", label: "Jacobsen", url: "https://upload.wikimedia.org/wikipedia/commons/f/f5/Jacobsen_logo.svg" },
-  { slug: "honda", label: "Honda", url: "https://upload.wikimedia.org/wikipedia/commons/0/0c/Honda_logo.svg" },
-  { slug: "kubota", label: "Kubota", url: "https://upload.wikimedia.org/wikipedia/commons/5/5c/Kubota-Logo.svg" },
-  { slug: "bad-boy", label: "Bad Boy", url: "https://upload.wikimedia.org/wikipedia/commons/e/e1/Bad_Boy_Mowers_logo.png" },
-  { slug: "bad-boy-mowers", label: "Bad Boy Mowers", url: "https://upload.wikimedia.org/wikipedia/commons/e/e1/Bad_Boy_Mowers_logo.png" },
-  { slug: "ditch-witch", label: "Ditch Witch", url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Ditch_Witch_logo.svg" },
-  { slug: "hayter", label: "Hayter", url: "https://upload.wikimedia.org/wikipedia/commons/d/d5/Hayter_logo.svg" },
-  { slug: "boss", label: "Boss", url: "https://upload.wikimedia.org/wikipedia/commons/9/94/The_Boss_Snowplow_logo.png" },
-  { slug: "cub-cadet", label: "Cub Cadet", url: "https://upload.wikimedia.org/wikipedia/commons/0/03/Cub_Cadet_logo.svg" },
-  { slug: "mean-green-mowers", label: "Mean Green", url: "https://upload.wikimedia.org/wikipedia/commons/0/0a/Mean_Green_Mowers_logo.png" }
+  {
+    slug: "stanley-black-decker",
+    label: "Stanley Black & Decker",
+    url: "https://www.stanleyblackanddecker.com/themes/custom/sbd/img/logo.svg"
+  },
+  {
+    slug: "stanley",
+    label: "Stanley",
+    url: "https://www.stanleytools.com/on/demandware.static/-/Sites-STS-Library/default/dwb3a178eb/images/logos/stanley-logo.svg"
+  },
+  {
+    slug: "craftsman",
+    label: "Craftsman",
+    url: "https://www.craftsman.com/on/demandware.static/-/Sites-craftsman-Library/default/dw6d0da7f4/images/logos/craftsman-logo.svg"
+  },
+  {
+    slug: "mtd-holdings",
+    label: "MTD Holdings",
+    url: "https://www.mtdproducts.com/-/media/project/mtd/images/logos/mtd-products-logo.svg"
+  },
+  {
+    slug: "mtd",
+    label: "MTD",
+    url: "https://www.mtdproducts.com/-/media/project/mtd/images/logos/mtd-logo.svg"
+  },
+  {
+    slug: "mtd-professional",
+    label: "MTD Professional",
+    url: "https://www.cubcadet.com/on/demandware.static/-/Library-Sites-cubcadet-shared/default/dw55fdf1a6/images/logos/mtd-pro-logo.svg"
+  },
+  {
+    slug: "husqvarna-group",
+    label: "Husqvarna Group",
+    url: "https://www.husqvarna.com/globalassets/media/shared/logos/husqvarna-group-logo.svg"
+  },
+  {
+    slug: "husqvarna",
+    label: "Husqvarna",
+    url: "https://www.husqvarna.com/globalassets/media/shared/logos/husqvarna-logo.svg"
+  },
+  {
+    slug: "john-deere",
+    label: "John Deere",
+    url: "https://www.deere.com/assets/images/common/logos/john-deere-logo.svg"
+  },
+  {
+    slug: "toro",
+    label: "Toro",
+    url: "https://www.toro.com/-/media/Images/Toro/logos/toro-logo.svg"
+  },
+  {
+    slug: "exmark",
+    label: "Exmark",
+    url: "https://www.exmark.com/-/media/Exmark/Images/Logos/exmark-logo.svg"
+  },
+  {
+    slug: "ariensco",
+    label: "AriensCo",
+    url: "https://www.ariensco.com/-/media/ariensco/logos/ariensco-logo.svg"
+  },
+  {
+    slug: "ariens",
+    label: "Ariens",
+    url: "https://www.ariens.com/-/media/ariens/logos/ariens-logo.svg"
+  },
+  {
+    slug: "gravely",
+    label: "Gravely",
+    url: "https://www.gravely.com/-/media/gravely/logos/gravely-logo.svg"
+  },
+  {
+    slug: "stiga-group",
+    label: "Stiga Group",
+    url: "https://corporate.stiga.com/wp-content/uploads/2021/03/stiga-group-logo.svg"
+  },
+  {
+    slug: "stiga",
+    label: "Stiga",
+    url: "https://www.stiga.com/media/logo/stiga-logo.svg"
+  },
+  {
+    slug: "swisher",
+    label: "Swisher",
+    url: "https://www.swisherinc.com/wp-content/uploads/2020/01/swisher-logo.svg"
+  },
+  {
+    slug: "doosan-bobcat",
+    label: "Doosan Bobcat",
+    url: "https://www.doosanbobcat.com/sites/default/files/2022-03/doosan-bobcat-logo.svg"
+  },
+  {
+    slug: "bobcat",
+    label: "Bobcat",
+    url: "https://www.bobcat.com/_assets/bobcat-logo.svg"
+  },
+  {
+    slug: "greenworks",
+    label: "Greenworks",
+    url: "https://www.greenworkstools.com/on/demandware.static/-/Sites-greenworks-Library/default/dw3316d8df/images/brand/greenworks-logo.svg"
+  },
+  {
+    slug: "tti",
+    label: "TTI",
+    url: "https://www.ttigroup.com/wp-content/uploads/2021/07/tti-logo.svg"
+  },
+  {
+    slug: "ryobi",
+    label: "Ryobi",
+    url: "https://www.ryobitools.com/assets/images/ryobi-logo.svg"
+  },
+  {
+    slug: "chervon",
+    label: "Chervon",
+    url: "https://www.chervongroup.com/wp-content/uploads/2021/06/chervon-logo.svg"
+  },
+  {
+    slug: "ego",
+    label: "EGO",
+    url: "https://egopowerplus.com/assets/images/ego-logo.svg"
+  },
+  {
+    slug: "scag",
+    label: "Scag",
+    url: "https://www.scag.com/images/scag-logo.svg"
+  },
+  {
+    slug: "wright",
+    label: "Wright",
+    url: "https://www.wrightmfg.com/images/logo.svg"
+  },
+  {
+    slug: "mean-green",
+    label: "Mean Green",
+    url: "https://www.meangreenproducts.com/wp-content/themes/meangreen/images/logo.png"
+  },
+  {
+    slug: "stihl",
+    label: "Stihl",
+    url: "https://www.stihl.com/p/content/dam/stihl/stihl-logo.svg"
+  },
+  {
+    slug: "textron",
+    label: "Textron",
+    url: "https://www.textron.com/sites/default/files/2020-09/Textron-logo-blue.svg"
+  },
+  {
+    slug: "jacobsen",
+    label: "Jacobsen",
+    url: "https://www.jacobsen.com/sites/default/files/2021-04/Jacobsen_logo.svg"
+  },
+  {
+    slug: "honda",
+    label: "Honda",
+    url: "https://global.honda/content/dam/site/global/top-page/design/logo_honda.svg"
+  },
+  {
+    slug: "kubota",
+    label: "Kubota",
+    url: "https://www.kubota.com/assets/images/global/common/kubota-logo.svg"
+  },
+  {
+    slug: "bad-boy",
+    label: "Bad Boy",
+    url: "https://badboymowers.com/wp-content/uploads/2021/01/bad-boy-mowers-logo.svg"
+  },
+  {
+    slug: "bad-boy-mowers",
+    label: "Bad Boy Mowers",
+    url: "https://badboymowers.com/wp-content/uploads/2021/01/bad-boy-mowers-logo.svg"
+  },
+  {
+    slug: "ditch-witch",
+    label: "Ditch Witch",
+    url: "https://www.ditchwitch.com/sites/default/files/dw-logo.svg"
+  },
+  {
+    slug: "hayter",
+    label: "Hayter",
+    url: "https://www.hayter.co.uk/wp-content/themes/hayter/assets/img/logo.svg"
+  },
+  {
+    slug: "boss",
+    label: "Boss",
+    url: "https://www.bossplow.com/-/media/project/boss/logos/boss-logo.svg"
+  },
+  {
+    slug: "cub-cadet",
+    label: "Cub Cadet",
+    url: "https://www.cubcadet.com/on/demandware.static/-/Library-Sites-cubcadet-shared/default/dw5e3de3e4/images/logos/cub-cadet-logo.svg"
+  },
+  {
+    slug: "mean-green-mowers",
+    label: "Mean Green",
+    url: "https://www.meangreenproducts.com/wp-content/themes/meangreen/images/logo.png"
+  }
 ];
 
 function extractArray(content, exportName) {
@@ -119,12 +277,48 @@ function guessExtension(url, contentType, fallback = ".jpg") {
   return fallback;
 }
 
+function expandDownloadUrls(url) {
+  const variations = [url];
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.endsWith("wikimedia.org")) {
+      const rawName = parsed.pathname.split("/").pop() ?? "";
+      const fileName = decodeURIComponent(rawName);
+      if (rawName) {
+        const specialFilePath = `https://commons.wikimedia.org/wiki/Special:FilePath/${rawName}`;
+        if (!variations.includes(specialFilePath)) {
+          variations.push(specialFilePath);
+        }
+        const md5 = createHash("md5").update(rawName).digest("hex");
+        const commonsPath = `https://upload.wikimedia.org/wikipedia/commons/${md5.slice(0, 1)}/${md5.slice(0, 2)}/${rawName}`;
+        if (!variations.includes(commonsPath)) {
+          variations.push(commonsPath);
+        }
+      }
+    }
+  } catch {
+    // ignore invalid url
+  }
+  return variations;
+}
+
 async function fetchBinary(url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
+    const headers = {
+      "user-agent": USER_AGENT,
+      accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "accept-language": "en-US,en;q=0.9"
+    };
+    try {
+      const referer = new URL(url);
+      headers.referer = `${referer.origin}/`;
+    } catch {
+      // ignore invalid url when constructing referer
+    }
     const response = await fetch(url, {
-      headers: { "user-agent": USER_AGENT },
+      headers,
       signal: controller.signal
     });
     if (!response.ok) {
@@ -189,18 +383,24 @@ async function syncProductImages(products) {
 
     let savedFile = null;
     if (!skipDownload) {
-      for (const url of candidates) {
-        try {
-          const { buffer, contentType } = await fetchBinary(url);
-          const ext = guessExtension(url, contentType);
-          const fileName = `${product.id}${ext}`;
-          const filePath = path.join(imageDir, fileName);
-          await writeIfChanged(filePath, buffer);
-          savedFile = fileName;
-          console.log(`✓ 下载产品图片 ${product.id} <- ${url}`);
+      for (const rawUrl of candidates) {
+        const downloadQueue = expandDownloadUrls(rawUrl);
+        for (const url of downloadQueue) {
+          try {
+            const { buffer, contentType } = await fetchBinary(url);
+            const ext = guessExtension(url, contentType);
+            const fileName = `${product.id}${ext}`;
+            const filePath = path.join(imageDir, fileName);
+            await writeIfChanged(filePath, buffer);
+            savedFile = fileName;
+            console.log(`✓ 下载产品图片 ${product.id} <- ${url}`);
+            break;
+          } catch (error) {
+            console.warn(`× 下载 ${url} 失败: ${error.message}`);
+          }
+        }
+        if (savedFile) {
           break;
-        } catch (error) {
-          console.warn(`× 下载 ${url} 失败: ${error.message}`);
         }
       }
     }
@@ -231,16 +431,20 @@ async function syncLogos() {
     const baseName = entry.slug;
     let fileName = null;
     if (!skipDownload) {
-      try {
-        const { buffer, contentType } = await fetchBinary(entry.url);
-        const ext = guessExtension(entry.url, contentType, ".svg");
-        const resolvedName = `${baseName}${ext}`;
-        const filePath = path.join(logoDir, resolvedName);
-        await writeIfChanged(filePath, buffer);
-        fileName = resolvedName;
-        console.log(`✓ 下载 Logo ${entry.slug}`);
-      } catch (error) {
-        console.warn(`× 下载 Logo ${entry.slug} 失败: ${error.message}`);
+      const variations = expandDownloadUrls(entry.url);
+      for (const url of variations) {
+        try {
+          const { buffer, contentType } = await fetchBinary(url);
+          const ext = guessExtension(url, contentType, ".svg");
+          const resolvedName = `${baseName}${ext}`;
+          const filePath = path.join(logoDir, resolvedName);
+          await writeIfChanged(filePath, buffer);
+          fileName = resolvedName;
+          console.log(`✓ 下载 Logo ${entry.slug} <- ${url}`);
+          break;
+        } catch (error) {
+          console.warn(`× 下载 Logo ${entry.slug} <- ${url} 失败: ${error.message}`);
+        }
       }
     }
 
