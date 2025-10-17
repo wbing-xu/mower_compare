@@ -41,7 +41,7 @@ export default async function HomePage() {
             </div>
             <div className="rounded-2xl bg-slate-100 p-4">
               <dt className="text-xs text-slate-500">覆盖型号</dt>
-              <dd className="mt-2 text-2xl font-semibold text-slate-800">{allProducts.length * 5}+</dd>
+              <dd className="mt-2 text-2xl font-semibold text-slate-800">{allProducts.length}+</dd>
             </div>
             <div className="rounded-2xl bg-slate-100 p-4">
               <dt className="text-xs text-slate-500">参数字段</dt>

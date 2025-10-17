@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { productImageManifest } from "@/data/product-image-manifest";
 import { type ProductSummary } from "@/types/domain";
 
 const AVAILABLE_LOGO_SLUGS = new Set([
@@ -50,8 +51,13 @@ export function formatRange(min?: number, max?: number, unit?: string) {
 }
 
 export function getProductImage(
-  product: Pick<ProductSummary, "coverImage" | "specs" | "brandName" | "companyId">
+  product: Pick<ProductSummary, "id" | "coverImage" | "specs" | "brandName" | "companyId">
 ) {
+  const manifestPath = productImageManifest[product.id];
+  if (manifestPath) {
+    return manifestPath;
+  }
+
   const cover = typeof product.coverImage === "string" ? product.coverImage.trim() : "";
   if (cover) {
     return cover;
