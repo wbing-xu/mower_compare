@@ -1,6 +1,10 @@
 import { promises as fs } from "fs";
 import { createHash } from "crypto";
 import path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
@@ -303,33 +307,70 @@ function expandDownloadUrls(url) {
 }
 
 async function fetchBinary(url) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const args = [
+    "--silent",
+    "--show-error",
+    "--location",
+    "--compressed",
+    "--dump-header",
+    "-"
+  ];
+  args.push("-H", `user-agent: ${USER_AGENT}`);
+  args.push(
+    "-H",
+    "accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+  );
+  args.push("-H", "accept-language: en-US,en;q=0.9");
   try {
-    const headers = {
-      "user-agent": USER_AGENT,
-      accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      "accept-language": "en-US,en;q=0.9"
-    };
-    try {
-      const referer = new URL(url);
-      headers.referer = `${referer.origin}/`;
-    } catch {
-      // ignore invalid url when constructing referer
-    }
-    const response = await fetch(url, {
-      headers,
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const contentType = response.headers.get("content-type") ?? "";
-    return { buffer: Buffer.from(arrayBuffer), contentType };
-  } finally {
-    clearTimeout(timeout);
+    const referer = new URL(url);
+    args.push("-H", `referer: ${referer.origin}/`);
+  } catch {
+    // ignore invalid url when constructing referer
   }
+  args.push(url);
+
+  let stdout;
+  try {
+    ({ stdout } = await execFileAsync("curl", args, {
+      encoding: "buffer",
+      maxBuffer: 50 * 1024 * 1024
+    }));
+  } catch (error) {
+    const stderr =
+      error.stderr && typeof error.stderr !== "string"
+        ? error.stderr.toString("utf-8")
+        : error.stderr;
+    const details = (stderr ?? error.message ?? "未知错误").trim();
+    throw new Error(details || "curl 调用失败");
+  }
+
+  const delimiter = Buffer.from("\r\n\r\n");
+  let headerEnd = stdout.lastIndexOf(delimiter);
+  let bodyOffset = delimiter.length;
+  if (headerEnd === -1) {
+    const lfDelimiter = Buffer.from("\n\n");
+    headerEnd = stdout.lastIndexOf(lfDelimiter);
+    bodyOffset = lfDelimiter.length;
+  }
+  if (headerEnd === -1) {
+    throw new Error("未能解析响应头");
+  }
+  const headerBuffer = stdout.slice(0, headerEnd);
+  const body = stdout.slice(headerEnd + bodyOffset);
+  const headerSections = headerBuffer
+    .toString("utf-8")
+    .split(/\r?\n\r?\n/)
+    .filter(Boolean);
+  const lastHeader = headerSections[headerSections.length - 1] ?? "";
+  const statusLine = lastHeader.split(/\r?\n/)[0] ?? "";
+  const statusMatch = statusLine.match(/HTTP\/\d(?:\.\d)?\s+(\d+)/i);
+  const status = statusMatch ? Number(statusMatch[1]) : 200;
+  if (status >= 400) {
+    throw new Error(`HTTP ${status}`);
+  }
+  const contentTypeMatch = lastHeader.match(/content-type:\s*([^\r\n]+)/i);
+  const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : "";
+  return { buffer: body, contentType };
 }
 
 async function writeIfChanged(filePath, data) {
