@@ -1,7 +1,5 @@
-<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" fill="none">
-  <rect width="120" height="120" rx="20" fill="#231F20"/>
-  <path d="M30 40h60v10H30z" fill="#F37021"/>
-  <path d="M30 55h60v10H30z" fill="#F37021"/>
-  <path d="M30 70h60v10H30z" fill="#F37021"/>
-  <text x="60" y="100" fill="white" font-family="Arial, sans-serif" font-weight="bold" font-size="20" text-anchor="middle">DW</text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160">
+  <rect width="320" height="160" rx="24" fill="#1f2937" />
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="'Inter', 'Source Han Sans', sans-serif" font-size="48" font-weight="600" fill="#f8fafc">Ditch Witch</text>
 </svg>

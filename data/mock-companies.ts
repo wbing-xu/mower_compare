@@ -1,3 +1,4 @@
+import { logoManifest } from "./logo-manifest";
 import { type Company } from "@/types/domain";
 
 export const mockCompanies: Company[] = [
@@ -8,7 +9,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: true,
     website: "https://www.stanleyblackanddecker.com/",
-    logo: "/logos/stanley.svg",
+    logo: logoManifest["stanley-black-decker"] ?? "/logos/stanley.svg",
     description:
       "Stanley Black & Decker 通过 Craftsman、MTD 等品牌布局住宅园林机械，并在零售渠道具有深厚积累。",
     tags: ["上市公司", "民用", "园林"],
@@ -57,7 +58,7 @@ export const mockCompanies: Company[] = [
     country: "瑞典",
     listed: true,
     website: "https://www.husqvarna.com/",
-    logo: "/logos/husqvarna.svg",
+    logo: logoManifest["husqvarna-group"] ?? "/logos/husqvarna.svg",
     description:
       "Husqvarna 深耕机器人割草与专业园林服务，Ceora 平台覆盖市政与球场级应用。",
     tags: ["上市公司", "机器人", "商用"],
@@ -95,7 +96,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: true,
     website: "https://www.deere.com/",
-    logo: "/logos/john-deere.svg",
+    logo: logoManifest["john-deere"] ?? "/logos/john-deere.svg",
     description:
       "John Deere 在农机和草坪管理领域提供从零转割草到球场机械的全套解决方案。",
     tags: ["上市公司", "乘骑式", "商用"],
@@ -127,7 +128,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: true,
     website: "https://www.thetorocompany.com/",
-    logo: "/logos/toro.svg",
+    logo: logoManifest["toro"] ?? "/logos/toro.svg",
     description:
       "Toro Company 覆盖零转割草、自治割草与场地维护，并通过 Exmark 等品牌服务专业市场。",
     tags: ["上市公司", "乘骑式", "商用"],
@@ -173,7 +174,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: false,
     website: "https://www.ariensco.com/",
-    logo: "/logos/ariens.svg",
+    logo: logoManifest["ariensco"] ?? "/logos/ariens.svg",
     description:
       "AriensCo 拥有 Ariens 与 Gravely 双品牌，覆盖住宅与商用零转割草平台。",
     tags: ["私有企业", "乘骑式", "商用"],
@@ -219,7 +220,7 @@ export const mockCompanies: Company[] = [
     country: "瑞典",
     listed: false,
     website: "https://www.stiga.com/",
-    logo: "/logos/stiga.svg",
+    logo: logoManifest["stiga-group"] ?? "/logos/stiga.svg",
     description:
       "Stiga 在欧洲住宅与专业园林市场推出机器人、乘骑式及手持电动工具。",
     tags: ["私有企业", "机器人", "民用"],
@@ -251,7 +252,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: false,
     website: "https://www.swisherinc.com/",
-    logo: "/logos/swisher.svg",
+    logo: logoManifest["swisher"] ?? "/logos/swisher.svg",
     description:
       "Swisher 以拖挂式与粗草割草设备著称，面向农场与大面积物业。",
     tags: ["私有企业", "乘骑式", "商用"],
@@ -283,7 +284,7 @@ export const mockCompanies: Company[] = [
     country: "韩国",
     listed: true,
     website: "https://www.bobcat.com/",
-    logo: "/logos/bobcat.svg",
+    logo: logoManifest["doosan-bobcat"] ?? "/logos/bobcat.svg",
     description:
       "Bobcat 拓展至地面维护设备，推出高性能零转与紧凑型工具。",
     tags: ["上市公司", "乘骑式", "商用"],
@@ -315,7 +316,7 @@ export const mockCompanies: Company[] = [
     country: "中国",
     listed: false,
     website: "https://www.greenworkstools.com/",
-    logo: "/logos/greenworks.svg",
+    logo: logoManifest["greenworks"] ?? "/logos/greenworks.svg",
     description:
       "Greenworks 在 24V~82V 电池平台上推出住宅到轻商用的园林设备。",
     tags: ["私有企业", "机器人", "民用"],
@@ -347,7 +348,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: false,
     website: "https://www.mtdproducts.com/",
-    logo: "/logos/mtd.svg",
+    logo: logoManifest["mtd-holdings"] ?? "/logos/mtd.svg",
     description:
       "MTD Holdings 运营 Cub Cadet、Troy-Bilt 等品牌，为北美住宅和轻商用提供平台。",
     tags: ["私有企业", "乘骑式", "民用"],
@@ -380,7 +381,7 @@ export const mockCompanies: Company[] = [
     country: "中国香港",
     listed: true,
     website: "https://www.ttigroup.com/",
-    logo: "/logos/ryobi.svg",
+    logo: logoManifest["tti"] ?? "/logos/ryobi.svg",
     description:
       "TTI 通过 Ryobi、Milwaukee 等品牌在 DIY 与专业市场提供电动工具及园林解决方案。",
     tags: ["上市公司", "民用", "电动"],
@@ -412,7 +413,7 @@ export const mockCompanies: Company[] = [
     country: "中国",
     listed: true,
     website: "https://www.chervongroup.com/",
-    logo: "/logos/ego.svg",
+    logo: logoManifest["chervon"] ?? "/logos/ego.svg",
     description:
       "Chervon 旗下 EGO Power+ 打造 56V ARC Lithium 电池平台，覆盖从手持到乘骑式设备。",
     tags: ["上市公司", "乘骑式", "电动"],
@@ -444,7 +445,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: false,
     website: "https://www.scag.com/",
-    logo: "/logos/scag.svg",
+    logo: logoManifest["scag"] ?? "/logos/scag.svg",
     description:
       "Scag 以重载零转割草机著称，为专业承包商和设施维护提供高耐久平台。",
     tags: ["私有企业", "乘骑式", "商用"],
@@ -476,7 +477,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: false,
     website: "https://www.wrightmfg.com/",
-    logo: "/logos/wright.svg",
+    logo: logoManifest["wright"] ?? "/logos/wright.svg",
     description:
       "Wright 专注站立式与紧凑型零转割草机，服务专业园林承包商。",
     tags: ["私有企业", "乘骑式", "商用"],
@@ -508,7 +509,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: false,
     website: "https://meangreenproducts.com/",
-    logo: "/logos/meangreen.svg",
+    logo: logoManifest["mean-green"] ?? "/logos/meangreen.svg",
     description:
       "Mean Green 聚焦全电动商用零转平台，提供长续航与智慧互联能力。",
     tags: ["私有企业", "乘骑式", "电动"],
@@ -540,7 +541,7 @@ export const mockCompanies: Company[] = [
     country: "德国",
     listed: false,
     website: "https://www.stihl.com/",
-    logo: "/logos/stihl.svg",
+    logo: logoManifest["stihl"] ?? "/logos/stihl.svg",
     description:
       "Stihl 在手持、电池与机器人割草等园林设备领域拥有全球影响力。",
     tags: ["私有企业", "机器人", "民用"],
@@ -572,7 +573,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: true,
     website: "https://www.textron.com/",
-    logo: "/logos/jacobsen.svg",
+    logo: logoManifest["textron"] ?? "/logos/jacobsen.svg",
     description:
       "Textron 旗下 Jacobsen、Cushman 等品牌覆盖高端草坪与球场机械。",
     tags: ["上市公司", "商用", "乘骑式"],
@@ -604,7 +605,7 @@ export const mockCompanies: Company[] = [
     country: "日本",
     listed: true,
     website: "https://global.honda/",
-    logo: "/logos/honda.svg",
+    logo: logoManifest["honda"] ?? "/logos/honda.svg",
     description:
       "Honda 在小型发动机与机器人割草领域持续创新，Miimo 系列覆盖高端住宅。",
     tags: ["上市公司", "机器人", "民用"],
@@ -636,7 +637,7 @@ export const mockCompanies: Company[] = [
     country: "日本",
     listed: true,
     website: "https://www.kubota.com/",
-    logo: "/logos/kubota.svg",
+    logo: logoManifest["kubota"] ?? "/logos/kubota.svg",
     description:
       "Kubota 在农机、场地及施工设备领域提供柴油零转与自治解决方案。",
     tags: ["上市公司", "乘骑式", "商用"],
@@ -668,7 +669,7 @@ export const mockCompanies: Company[] = [
     country: "美国",
     listed: false,
     website: "https://badboymowers.com/",
-    logo: "/logos/badboy.svg",
+    logo: logoManifest["bad-boy"] ?? "/logos/badboy.svg",
     description:
       "Bad Boy 主打高性能零转割草机，覆盖住宅与商用区间。",
     tags: ["私有企业", "乘骑式", "商用"],

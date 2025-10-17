@@ -66,11 +66,11 @@
    ```bash
    npm install
    ```
-2. **刷新示例数据（可选）**
+2. **刷新示例数据与资源（可选）**
    ```bash
    npm run refresh:data
    ```
-   该命令会读取 `data/mock-products.ts` 并生成 `data/imported-products.json`，模拟“导入后写入数据库”的过程。
+   该命令会读取 `data/mock-products.ts` 并生成 `data/imported-products.json`，同时尝试拉取产品图片与公司 / 品牌 Logo，填充到 `public/product-images` 与 `public/logos` 目录。如果当前环境无法访问外网，可通过 `npm run refresh:data -- --skip-download` 跳过下载，仅生成数据与占位图。
 
 3. **启动开发服务器**
    ```bash
@@ -113,7 +113,7 @@
 
 ## 📦 数据刷新脚本
 
-- `npm run refresh:data`：从 `data/mock-products.ts` 提取 24 条示例型号写入 `data/imported-products.json`，便于快速搭建或重置演示数据库。
+- `npm run refresh:data`：从 `data/mock-products.ts` 提取 24 条示例型号写入 `data/imported-products.json`，并按需下载或生成产品图片 / Logo，便于快速搭建或重置演示数据库。
 - 生成的 JSON 文件既可直接作为静态数据，也可作为后端导入真实数据库时的结构参考。
 
 ## 📦 后续计划

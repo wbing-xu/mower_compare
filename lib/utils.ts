@@ -1,33 +1,8 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { logoManifest } from "@/data/logo-manifest";
 import { productImageManifest } from "@/data/product-image-manifest";
 import { type ProductSummary } from "@/types/domain";
-
-const AVAILABLE_LOGO_SLUGS = new Set([
-  "ariens",
-  "badboy",
-  "bobcat",
-  "boss",
-  "ditch-witch",
-  "ego",
-  "greenworks",
-  "hayter",
-  "honda",
-  "husqvarna",
-  "jacobsen",
-  "john-deere",
-  "kubota",
-  "meangreen",
-  "mtd",
-  "ryobi",
-  "scag",
-  "stanley",
-  "stiga",
-  "stihl",
-  "swisher",
-  "toro",
-  "wright"
-]);
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -76,8 +51,8 @@ export function getProductImage(
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
-    if (brandSlug && AVAILABLE_LOGO_SLUGS.has(brandSlug)) {
-      return `/logos/${brandSlug}.svg`;
+    if (brandSlug && logoManifest[brandSlug]) {
+      return logoManifest[brandSlug];
     }
   }
 
@@ -85,8 +60,8 @@ export function getProductImage(
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  if (companySlug && AVAILABLE_LOGO_SLUGS.has(companySlug)) {
-    return `/logos/${companySlug}.svg`;
+  if (companySlug && logoManifest[companySlug]) {
+    return logoManifest[companySlug];
   }
 
   return "/placeholder-product.svg";

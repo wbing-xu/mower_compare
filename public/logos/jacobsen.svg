@@ -1,7 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" role="img" aria-labelledby="title">
-  <title id="title">Jacobsen</title>
-  <rect width="200" height="80" rx="12" fill="#ff6f3c" />
-  <text x="100" y="50" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" fill="#fff" text-anchor="middle">
-    JACOBSEN
-  </text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160">
+  <rect width="320" height="160" rx="24" fill="#1f2937" />
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="'Inter', 'Source Han Sans', sans-serif" font-size="48" font-weight="600" fill="#f8fafc">Jacobsen</text>
 </svg>

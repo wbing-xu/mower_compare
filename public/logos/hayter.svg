@@ -1,6 +1,5 @@
-<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" fill="none">
-  <rect width="120" height="120" rx="20" fill="#0B3D2E"/>
-  <circle cx="60" cy="50" r="20" stroke="#9FE870" stroke-width="6"/>
-  <path d="M45 85h30v10H45z" fill="#9FE870"/>
-  <text x="60" y="105" fill="white" font-family="Arial, sans-serif" font-weight="bold" font-size="18" text-anchor="middle">Hayter</text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160">
+  <rect width="320" height="160" rx="24" fill="#1f2937" />
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="'Inter', 'Source Han Sans', sans-serif" font-size="48" font-weight="600" fill="#f8fafc">Hayter</text>
 </svg>
