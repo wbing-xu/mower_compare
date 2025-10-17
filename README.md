@@ -145,6 +145,19 @@ npm run refresh:data -- --browser \
 
 参数格式为 `品牌标识::URL`，品牌标识支持 `toro` / `Toro` / `toro-official` 等大小写形式；若省略品牌标识则默认追加到 Toro。脚本会自动去重并在普通请求失败时继续使用浏览器模式加载这些页面，确保 TimeCutter、Titan 等系列的所有型号都能被抓取到。
 
+### 只抓取指定系列
+
+如果你只想先验证某几个目录页（例如 TimeCutter、Titan），可以在追加 `--official-listing` 的同时配合以下参数：
+
+```bash
+npm run refresh:data -- --browser --force-official \
+  --official-listing-only --official-no-sitemaps \
+  --official-listing=https://www.toro.com/en/homeowner/riding-mowers/timecutter-mowers \
+  --official-listing=https://www.toro.com/en/homeowner/riding-mowers/titan-mowers
+```
+
+`--official-listing-only` 会忽略脚本内置的默认目录（包括产品总目录），`--official-no-sitemaps` 会跳过 sitemap，避免加载整个站点。这样在 macOS 上配合 `--browser` 即可完全模拟人工浏览两条系列页面，显著缩短测试时间。
+
 ## 📦 后续计划
 
 - 接入 Prisma ORM + PostgreSQL，实现公司/产品/参数的可持久化存储。

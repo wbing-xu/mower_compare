@@ -22,6 +22,8 @@ const forceOfficialScrape = args.has("--force-official");
 const forceBrowserMode = args.has("--browser");
 const preferBrowserMode = forceBrowserMode || args.has("--use-browser");
 const showBrowserWindow = args.has("--show-browser");
+const listingsOnlyMode = args.has("--official-listing-only");
+const skipOfficialSitemaps = args.has("--official-no-sitemaps");
 const effectiveSkipOfficial = skipOfficialScrape || (skipDownload && !forceOfficialScrape);
 
 const ACCEPT_LANGUAGE_HEADER = "en-US,en;q=0.9";
@@ -358,11 +360,10 @@ const OFFICIAL_SOURCES = OFFICIAL_SOURCES_BASE.map((source) => {
     .filter(Boolean)
     .map((value) => String(value).toLowerCase());
   const additions = candidateKeys.flatMap((key) => extraOfficialListings.get(key) ?? []);
-  if (!additions.length) {
-    return source;
-  }
-  const uniqueListings = Array.from(new Set([...(source.listingPages ?? []), ...additions]));
-  return { ...source, listingPages: uniqueListings };
+  const baseListings = listingsOnlyMode ? [] : source.listingPages ?? [];
+  const uniqueListings = Array.from(new Set([...baseListings, ...additions]));
+  const sitemapUrls = skipOfficialSitemaps ? [] : source.sitemapUrls ?? [];
+  return { ...source, listingPages: uniqueListings, sitemapUrls };
 });
 
 function extractArray(content, exportName) {
