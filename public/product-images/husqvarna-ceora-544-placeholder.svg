@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
+  <title id="title">Husqvarna Ceora 544</title>
+  <desc id="desc">模块化专业机器人割草机，支持 EPOS 无线定位与 Fleet Services 远程运营。</desc>
+  <defs>
+    <linearGradient id="gradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#42275A" />
+      <stop offset="100%" stop-color="#734B6D" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" rx="48" fill="url(#gradient)" />
+  <g fill="white" font-family="'Inter', 'Source Han Sans', sans-serif">
+    <text x="60" y="180" font-size="48" font-weight="600" opacity="0.85">Husqvarna</text>
+    <text x="60" y="260" font-size="72" font-weight="700">Husqvarna Ceora 544</text>
+    <text x="60" y="340" font-size="24" font-weight="500" opacity="0.7">Robot · municipal</text>
+    <foreignObject x="60" y="370" width="680" height="200">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="font-size:22px; line-height:1.4; color:rgba(255,255,255,0.82); font-weight:500;">
+        模块化专业机器人割草机，支持 EPOS 无线定位与 Fleet Services 远程运营。
+      </div>
+    </foreignObject>
+  </g>
+</svg>

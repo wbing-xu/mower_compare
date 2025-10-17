@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" role="img" aria-labelledby="title">
+  <title id="title">Mean Green</title>
+  <rect width="200" height="80" rx="12" fill="#1a8e2f" />
+  <text x="100" y="50" font-family="'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" fill="#eaffd5" text-anchor="middle">
+    MEAN GREEN
+  </text>
+</svg>

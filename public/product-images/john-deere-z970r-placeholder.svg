@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
+  <title id="title">John Deere Z970R</title>
+  <desc id="desc">ZTrak 900 系列旗舰，采用 35 hp 发动机与 60 英寸 7Gauge Pro 甲板。</desc>
+  <defs>
+    <linearGradient id="gradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1D976C" />
+      <stop offset="100%" stop-color="#93F9B9" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" rx="48" fill="url(#gradient)" />
+  <g fill="white" font-family="'Inter', 'Source Han Sans', sans-serif">
+    <text x="60" y="180" font-size="48" font-weight="600" opacity="0.85">John Deere</text>
+    <text x="60" y="260" font-size="72" font-weight="700">John Deere Z970R</text>
+    <text x="60" y="340" font-size="24" font-weight="500" opacity="0.7">ICE · professional</text>
+    <foreignObject x="60" y="370" width="680" height="200">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="font-size:22px; line-height:1.4; color:rgba(255,255,255,0.82); font-weight:500;">
+        ZTrak 900 系列旗舰，采用 35 hp 发动机与 60 英寸 7Gauge Pro 甲板。
+      </div>
+    </foreignObject>
+  </g>
+</svg>
