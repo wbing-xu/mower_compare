@@ -116,6 +116,23 @@
 - `npm run refresh:data`：从 `data/mock-products.ts` 提取 24 条示例型号写入 `data/imported-products.json`，并按需下载或生成产品图片 / Logo，便于快速搭建或重置演示数据库。
 - 生成的 JSON 文件既可直接作为静态数据，也可作为后端导入真实数据库时的结构参考。
 
+### 使用真实浏览器抓取官网数据
+
+部分品牌（如 Toro）会针对脚本访问返回 403，需要模拟真实浏览器才能拿到完整的产品目录。脚本已内置 Playwright 方案：
+
+1. 安装 Playwright 依赖（仅需一次）：
+   ```bash
+   npm install --save-dev playwright
+   npx playwright install chromium
+   ```
+2. 执行数据刷新时追加 `--browser` 参数，即可自动唤起无头 Chromium 并以浏览器方式抓取：
+   ```bash
+   npm run refresh:data -- --browser
+   ```
+   如果需要观察抓取过程，可再加上 `--show-browser` 打开可视化窗口（macOS 默认支持）。
+
+脚本仍会优先尝试普通 HTTP 请求；仅在被拒绝或显式开启 `--browser` 时才切换到浏览器模式，从而兼顾 CI 环境与本地 Mac 的使用体验。
+
 ## 📦 后续计划
 
 - 接入 Prisma ORM + PostgreSQL，实现公司/产品/参数的可持久化存储。

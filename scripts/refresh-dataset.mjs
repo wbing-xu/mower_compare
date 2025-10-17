@@ -18,7 +18,17 @@ const args = new Set(process.argv.slice(2));
 const skipDownload = args.has("--skip-download");
 const skipOfficialScrape = args.has("--skip-official");
 const forceOfficialScrape = args.has("--force-official");
+const forceBrowserMode = args.has("--browser");
+const preferBrowserMode = forceBrowserMode || args.has("--use-browser");
+const showBrowserWindow = args.has("--show-browser");
 const effectiveSkipOfficial = skipOfficialScrape || (skipDownload && !forceOfficialScrape);
+
+const ACCEPT_LANGUAGE_HEADER = "en-US,en;q=0.9";
+const SEC_CH_UA_PLATFORM = '"macOS"';
+const DEFAULT_VIEWPORT = { width: 1440, height: 900 };
+
+let browserSession = undefined;
+let browserWarningPrinted = false;
 
 const LOGO_SOURCES = [
   {
@@ -243,7 +253,62 @@ const OFFICIAL_SOURCES = [
       /\/sds\//i,
       /\.pdf$/i
     ],
-    limit: 120
+    limit: 120,
+    useBrowser: true,
+    transform(product, { url, browserMeta }) {
+      const specs = Array.isArray(product.specs) ? [...product.specs] : [];
+      const pushSpec = (definitionId, value) => {
+        if (!value) {
+          return;
+        }
+        if (specs.some((item) => item?.definitionId === definitionId && item.value === value)) {
+          return;
+        }
+        specs.push({ definitionId, value });
+      };
+
+      let taxonomySegments = [];
+      try {
+        const parsed = new URL(url);
+        const parts = parsed.pathname.split("/").filter(Boolean);
+        const enIndex = parts.indexOf("en");
+        taxonomySegments = enIndex >= 0 ? parts.slice(enIndex + 1) : parts;
+      } catch {
+        taxonomySegments = [];
+      }
+      const pathSegments = taxonomySegments.slice(0, -1);
+
+      const breadcrumbLabels = Array.isArray(browserMeta?.breadcrumbs)
+        ? browserMeta.breadcrumbs.map((item) => normalizeWhitespace(item?.text ?? "")).filter(Boolean)
+        : [];
+      const crumbPath = breadcrumbLabels.length >= 2 ? breadcrumbLabels.slice(1, -1) : breadcrumbLabels.slice(0, -1);
+      const crumbIgnorePattern = /^(home|products?|product catalog|catalog|all products|all equipment|overview)$/i;
+      const cleanedCrumbs = crumbPath.filter((label) => !crumbIgnorePattern.test(label));
+      const effectiveCrumbs = cleanedCrumbs.length > 0 ? cleanedCrumbs : crumbPath;
+
+      const fallbackFamily = pathSegments[0] ? humanizeSegment(pathSegments[0]) : "";
+      const fallbackSeries = pathSegments.length > 1 ? humanizeSegment(pathSegments[pathSegments.length - 1]) : fallbackFamily;
+      const pathLabel =
+        effectiveCrumbs.length > 0
+          ? effectiveCrumbs.join(" / ")
+          : pathSegments.map((segment) => humanizeSegment(segment)).filter(Boolean).join(" / ");
+      const familyLabel = effectiveCrumbs[0] || fallbackFamily;
+      const seriesLabel =
+        effectiveCrumbs.length > 0 ? effectiveCrumbs[effectiveCrumbs.length - 1] : fallbackSeries;
+
+      if (familyLabel) {
+        pushSpec("official_family", familyLabel);
+      }
+      if (seriesLabel && seriesLabel !== familyLabel) {
+        pushSpec("official_series", seriesLabel);
+      }
+      if (pathLabel) {
+        pushSpec("official_path", pathLabel);
+      }
+
+      product.specs = specs;
+      return product;
+    }
   }
 ];
 
@@ -275,6 +340,15 @@ function slugify(value) {
     .replace(/-{2,}/g, "-")
     .replace(/^-|-$/g, "");
   return normalized || "item";
+}
+
+function humanizeSegment(value) {
+  const cleaned = normalizeWhitespace(value).replace(/[_/]+/g, "-");
+  return cleaned
+    .split(/-+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function resolveUrl(base, href) {
@@ -496,6 +570,199 @@ function uniqueUrls(urls) {
   return result;
 }
 
+async function loadPlaywrightModule() {
+  try {
+    return await import("playwright");
+  } catch {
+    try {
+      return await import("playwright-core");
+    } catch {
+      const message =
+        "未安装 Playwright。请运行 `npm install --save-dev playwright` 并执行 `npx playwright install chromium`，即可启用浏览器抓取模式。";
+      if (forceBrowserMode) {
+        throw new Error(message);
+      }
+      if (!browserWarningPrinted && (preferBrowserMode || browserSession === undefined)) {
+        console.warn(`⚠️ ${message}`);
+        browserWarningPrinted = true;
+      }
+      return null;
+    }
+  }
+}
+
+async function ensureBrowserSession() {
+  if (browserSession !== undefined) {
+    return browserSession;
+  }
+  const playwright = await loadPlaywrightModule();
+  if (!playwright) {
+    browserSession = null;
+    return null;
+  }
+  const { chromium } = playwright;
+  if (!chromium) {
+    const message = "Playwright 未提供 chromium 驱动，无法启动浏览器模式。";
+    if (!browserWarningPrinted) {
+      console.warn(`⚠️ ${message}`);
+      browserWarningPrinted = true;
+    }
+    browserSession = null;
+    return null;
+  }
+  const browser = await chromium.launch({ headless: !showBrowserWindow });
+  const context = await browser.newContext({
+    userAgent: USER_AGENT,
+    viewport: DEFAULT_VIEWPORT,
+    locale: "en-US",
+    extraHTTPHeaders: {
+      Accept: DOCUMENT_ACCEPT_HEADER,
+      "Accept-Language": ACCEPT_LANGUAGE_HEADER,
+      "Sec-CH-UA": SEC_CH_UA,
+      "Sec-CH-UA-Mobile": "?0",
+      "Sec-CH-UA-Platform": SEC_CH_UA_PLATFORM,
+      "Upgrade-Insecure-Requests": "1",
+      "User-Agent": USER_AGENT
+    }
+  });
+  context.setDefaultTimeout(45000);
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", {
+      get: () => undefined
+    });
+  });
+  browserSession = { playwright, browser, context };
+  return browserSession;
+}
+
+async function closeBrowserSession() {
+  if (browserSession && browserSession.browser) {
+    try {
+      await browserSession.browser.close();
+    } catch {
+      // ignore shutdown errors
+    }
+  }
+  browserSession = null;
+}
+
+const shutdownBrowser = () => {
+  if (browserSession) {
+    closeBrowserSession().catch(() => {});
+  }
+};
+
+process.once("exit", shutdownBrowser);
+process.once("SIGINT", () => {
+  shutdownBrowser();
+  process.exit(130);
+});
+process.once("SIGTERM", () => {
+  shutdownBrowser();
+  process.exit(143);
+});
+
+async function withBrowserPage(handler) {
+  const session = await ensureBrowserSession();
+  if (!session) {
+    return null;
+  }
+  const page = await session.context.newPage();
+  try {
+    return await handler(page);
+  } finally {
+    await page.close();
+  }
+}
+
+async function autoScrollPage(page) {
+  try {
+    await page.evaluate(async () => {
+      const scrollElement = document.scrollingElement || document.documentElement;
+      if (!scrollElement) {
+        return;
+      }
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      let previousHeight = -1;
+      for (let iteration = 0; iteration < 20; iteration += 1) {
+        const currentHeight = scrollElement.scrollHeight;
+        window.scrollTo(0, currentHeight);
+        await wait(250);
+        if (currentHeight === previousHeight) {
+          break;
+        }
+        previousHeight = currentHeight;
+      }
+      window.scrollTo(0, 0);
+    });
+  } catch {
+    // ignore
+  }
+}
+
+async function collectLinksWithBrowser(url) {
+  const result = await withBrowserPage(async (page) => {
+    await page.route("**/*", (route) => {
+      const request = route.request();
+      const resourceType = request.resourceType();
+      if (["image", "media", "font"].includes(resourceType)) {
+        return route.abort();
+      }
+      return route.continue();
+    });
+    await page.goto(url, { waitUntil: "networkidle" });
+    await autoScrollPage(page);
+    await page.waitForTimeout(500);
+    const links = await page.evaluate(() => {
+      const anchors = Array.from(document.querySelectorAll('a[href]'));
+      return anchors
+        .map((anchor) => anchor.href)
+        .filter((href) => typeof href === "string" && href.startsWith("http"));
+    });
+    return links;
+  });
+  return Array.isArray(result) ? result : [];
+}
+
+async function fetchWithBrowser(url) {
+  const result = await withBrowserPage(async (page) => {
+    await page.goto(url, { waitUntil: "networkidle" });
+    await autoScrollPage(page);
+    await page.waitForTimeout(600);
+    const html = await page.content();
+    const meta = await page.evaluate(() => {
+      const getContent = (selector) => {
+        const element = document.querySelector(selector);
+        const value = element?.getAttribute("content") ?? "";
+        return value.trim();
+      };
+      const heading = document.querySelector("h1")?.textContent?.trim() ?? "";
+      const title = document.title?.trim() || getContent('meta[property="og:title"]');
+      const description =
+        getContent('meta[name="description"]') || getContent('meta[property="og:description"]');
+      const image =
+        getContent('meta[property="og:image"]') || getContent('meta[property="og:image:url"]');
+      const images = Array.from(document.querySelectorAll('img'))
+        .map((img) => img.currentSrc || img.src || "")
+        .filter(Boolean);
+      const breadcrumbAnchors = Array.from(
+        document.querySelectorAll(
+          'nav[aria-label="breadcrumb"] a, .breadcrumb a, .breadcrumbs a, [data-automation-id="breadcrumbs"] a'
+        )
+      );
+      const breadcrumbs = breadcrumbAnchors
+        .map((anchor) => ({
+          text: anchor.textContent?.trim() ?? "",
+          href: anchor.href
+        }))
+        .filter((item) => item.text && item.href);
+      return { heading, title, description, image, images, breadcrumbs };
+    });
+    return { text: html, meta };
+  });
+  return result ?? { text: "", meta: null };
+}
+
 async function gatherOfficialCandidates(source) {
   const urlBuckets = [];
   if (Array.isArray(source.sitemapUrls)) {
@@ -510,8 +777,37 @@ async function gatherOfficialCandidates(source) {
       urlBuckets.push(...links);
     }
   }
-  const filtered = filterOfficialUrls(urlBuckets, source);
-  const unique = uniqueUrls(filtered);
+  let filtered = filterOfficialUrls(urlBuckets, source);
+  let unique = uniqueUrls(filtered);
+
+  const shouldTryBrowser = (source.useBrowser ?? false) || preferBrowserMode || forceBrowserMode;
+  if (shouldTryBrowser && Array.isArray(source.listingPages)) {
+    const missingAll = unique.length === 0;
+    if (missingAll) {
+      console.log(`HTTP 抓取 ${source.brandName} 目录为空，尝试浏览器模式…`);
+    }
+    if (missingAll || source.useBrowser) {
+      const browserLinks = [];
+      for (const pageUrl of source.listingPages) {
+        try {
+          const links = await collectLinksWithBrowser(pageUrl);
+          browserLinks.push(...links);
+        } catch (error) {
+          console.warn(
+            `× 浏览器模式解析目录 ${pageUrl} 失败: ${error instanceof Error ? error.message : String(error)}`
+          );
+          if (forceBrowserMode) {
+            throw error instanceof Error ? error : new Error(String(error));
+          }
+        }
+      }
+      if (browserLinks.length > 0) {
+        filtered = filterOfficialUrls(urlBuckets.concat(browserLinks), source);
+        unique = uniqueUrls(filtered);
+      }
+    }
+  }
+
   if (source.limit && unique.length > source.limit) {
     return unique.slice(0, source.limit);
   }
@@ -539,25 +835,53 @@ function ensureAbsoluteImage(url, pageUrl) {
 }
 
 async function scrapeOfficialProduct(url, source) {
-  let response;
+  let html = "";
+  let browserMeta = null;
+  let httpError = null;
   try {
-    response = await fetchText(url);
+    const response = await fetchText(url);
+    html = response.text ?? "";
   } catch (error) {
-    console.warn(`× 访问产品页面 ${url} 失败: ${error.message}`);
+    httpError = error instanceof Error ? error : new Error(String(error));
+  }
+
+  const shouldTryBrowser = (source.useBrowser ?? false) || preferBrowserMode || forceBrowserMode;
+  if ((!html || html.length === 0) && shouldTryBrowser) {
+    try {
+      const browserResponse = await fetchWithBrowser(url);
+      html = browserResponse.text ?? html;
+      browserMeta = browserResponse.meta ?? null;
+    } catch (browserError) {
+      const reason = browserError instanceof Error ? browserError.message : String(browserError);
+      console.warn(`× 浏览器模式访问产品页面 ${url} 失败: ${reason}`);
+    }
+  }
+
+  if (!html) {
+    const message = httpError ? httpError.message : "未能获取页面内容";
+    console.warn(`× 访问产品页面 ${url} 失败: ${message}`);
+    if (forceBrowserMode) {
+      throw httpError ?? new Error(message);
+    }
     return null;
   }
-  const html = response.text ?? "";
   const jsonLdBlocks = extractJsonLdBlocks(html);
   const productNode = pickProductNode(jsonLdBlocks);
   const metaTitle = extractMetaContent(html, "og:title") || extractTitle(html);
+  const browserTitle = browserMeta?.title ? normalizeWhitespace(browserMeta.title) : "";
+  const browserHeading = browserMeta?.heading ? normalizeWhitespace(browserMeta.heading) : "";
   const nodeName = productNode?.name ? normalizeWhitespace(productNode.name) : "";
-  const modelName = nodeName || metaTitle;
+  const modelName = [nodeName, metaTitle, browserHeading, browserTitle].find((value) => value) || "";
   if (!modelName) {
     console.warn(`× 无法解析产品名称: ${url}`);
     return null;
   }
   const metaDescription =
-    productNode?.description ? normalizeWhitespace(productNode.description) : extractMetaContent(html, "og:description") || extractMetaNameContent(html, "description");
+    productNode?.description
+      ? normalizeWhitespace(productNode.description)
+      : extractMetaContent(html, "og:description") ||
+        extractMetaNameContent(html, "description") ||
+        (browserMeta?.description ? normalizeWhitespace(browserMeta.description) : "");
   const imageSources = [];
   const nodeImage = productNode?.image;
   if (typeof nodeImage === "string") {
@@ -568,6 +892,12 @@ async function scrapeOfficialProduct(url, source) {
   const metaImage = extractMetaContent(html, "og:image") || extractMetaContent(html, "og:image:url");
   if (metaImage) {
     imageSources.push(metaImage);
+  }
+  if (browserMeta?.image) {
+    imageSources.push(browserMeta.image);
+  }
+  if (Array.isArray(browserMeta?.images)) {
+    imageSources.push(...browserMeta.images);
   }
   const coverImage = imageSources
     .map((value) => ensureAbsoluteImage(value, url))
@@ -628,7 +958,18 @@ async function scrapeOfficialProduct(url, source) {
   };
 
   if (typeof source.transform === "function") {
-    return source.transform(product, { url, productNode, metaDescription, coverImage, sku, price, currency }) ?? product;
+    return (
+      source.transform(product, {
+        url,
+        productNode,
+        metaDescription,
+        coverImage,
+        sku,
+        price,
+        currency,
+        browserMeta
+      }) ?? product
+    );
   }
   return product;
 }
@@ -645,6 +986,9 @@ async function collectOfficialProducts() {
       urls = await gatherOfficialCandidates(source);
     } catch (error) {
       console.warn(`× 收集 ${source.brandName} 目录失败: ${error instanceof Error ? error.message : String(error)}`);
+      if (forceBrowserMode) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
       continue;
     }
     console.log(`找到 ${urls.length} 个候选页面，逐条解析…`);
@@ -1172,6 +1516,7 @@ async function syncLogos() {
 }
 
 async function main() {
+  try {
   const sourcePath = path.join(process.cwd(), "data", "mock-products.ts");
   const output = path.join(process.cwd(), "data", "imported-products.json");
   const raw = await fs.readFile(sourcePath, "utf-8");
@@ -1193,6 +1538,9 @@ async function main() {
 
   await syncProductImages(products);
   await syncLogos();
+  } finally {
+    await closeBrowserSession();
+  }
 }
 
 main().catch((error) => {

@@ -209,6 +209,33 @@ export const specDictionary: SpecDefinition[] = [
     dataType: "boolean"
   },
   {
+    id: "official_family",
+    group: "basic",
+    key: "official_family",
+    labelZh: "官网产品线",
+    labelEn: "Official Family",
+    dataType: "string",
+    description: "品牌官网中的一级目录或产品线"
+  },
+  {
+    id: "official_series",
+    group: "basic",
+    key: "official_series",
+    labelZh: "官网系列",
+    labelEn: "Official Series",
+    dataType: "string",
+    description: "品牌官网展示的系列名称"
+  },
+  {
+    id: "official_path",
+    group: "basic",
+    key: "official_path",
+    labelZh: "官网分类路径",
+    labelEn: "Official Path",
+    dataType: "string",
+    description: "官网产品页面所属的完整目录层级"
+  },
+  {
     id: "official_summary",
     group: "basic",
     key: "official_summary",
