@@ -8,6 +8,8 @@ const execFileAsync = promisify(execFile);
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+const SEC_CH_UA =
+  '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"';
 const args = new Set(process.argv.slice(2));
 const skipDownload = args.has("--skip-download");
 
@@ -282,22 +284,84 @@ function guessExtension(url, contentType, fallback = ".jpg") {
 }
 
 function expandDownloadUrls(url) {
-  const variations = [url];
+  const variations = [];
+  const seen = new Set();
+  const push = (value) => {
+    if (!value || seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+    variations.push(value);
+  };
+  push(url);
   try {
     const parsed = new URL(url);
+    const base = `${parsed.origin}${parsed.pathname}`;
+    const pathnameLower = parsed.pathname.toLowerCase();
+    const searchParams = new URLSearchParams(parsed.search);
+    if (parsed.search) {
+      push(base);
+    }
+
+    const ensureVariant = (mutator) => {
+      const params = new URLSearchParams(parsed.search);
+      mutator(params);
+      const query = params.toString();
+      push(query ? `${base}?${query}` : base);
+    };
+
+    if (pathnameLower.includes("/is/image/")) {
+      if (!searchParams.has("wid")) {
+        ensureVariant((params) => {
+          params.set("wid", "1600");
+          if (!params.has("hei")) {
+            params.set("hei", "1600");
+          }
+        });
+      }
+      if (!searchParams.has("fmt")) {
+        ensureVariant((params) => {
+          params.set("fmt", "png-alpha");
+          if (!params.has("qlt")) {
+            params.set("qlt", "90");
+          }
+        });
+      }
+    }
+
+    if (pathnameLower.includes("/on/demandware.static/")) {
+      ensureVariant((params) => {
+        if (!params.has("sw")) params.set("sw", "1600");
+        if (!params.has("sh")) params.set("sh", params.get("sw") ?? "1600");
+        if (!params.has("sm")) params.set("sm", "fit");
+      });
+    }
+
+    if (
+      parsed.hostname.includes("globalassets") ||
+      pathnameLower.includes("/media/") ||
+      pathnameLower.includes("/wp-content/")
+    ) {
+      ensureVariant((params) => {
+        if (!params.has("width")) params.set("width", "1600");
+        if (!params.has("quality")) params.set("quality", "90");
+      });
+    }
+
+    if (pathnameLower.endsWith(".svg") && !searchParams.has("raw")) {
+      ensureVariant((params) => {
+        params.set("raw", "1");
+      });
+    }
+
     if (parsed.hostname.endsWith("wikimedia.org")) {
       const rawName = parsed.pathname.split("/").pop() ?? "";
-      const fileName = decodeURIComponent(rawName);
       if (rawName) {
         const specialFilePath = `https://commons.wikimedia.org/wiki/Special:FilePath/${rawName}`;
-        if (!variations.includes(specialFilePath)) {
-          variations.push(specialFilePath);
-        }
+        push(specialFilePath);
         const md5 = createHash("md5").update(rawName).digest("hex");
         const commonsPath = `https://upload.wikimedia.org/wikipedia/commons/${md5.slice(0, 1)}/${md5.slice(0, 2)}/${rawName}`;
-        if (!variations.includes(commonsPath)) {
-          variations.push(commonsPath);
-        }
+        push(commonsPath);
       }
     }
   } catch {
@@ -306,57 +370,135 @@ function expandDownloadUrls(url) {
   return variations;
 }
 
-async function fetchBinary(url) {
-  const args = [
-    "--silent",
-    "--show-error",
-    "--location",
-    "--compressed",
-    "--dump-header",
-    "-"
-  ];
-  args.push("-H", `user-agent: ${USER_AGENT}`);
-  args.push(
-    "-H",
-    "accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
-  );
-  args.push("-H", "accept-language: en-US,en;q=0.9");
+function getApexDomain(hostname) {
+  const parts = hostname.split(".").filter(Boolean);
+  if (parts.length <= 2) {
+    return hostname;
+  }
+  const last = parts[parts.length - 1];
+  const secondLast = parts[parts.length - 2];
+  if (secondLast.length <= 3 && last.length === 2 && parts.length >= 3) {
+    return parts.slice(-3).join(".");
+  }
+  return parts.slice(-2).join(".");
+}
+
+function determineFetchSite(resourceHost, refererHost) {
+  if (!refererHost) {
+    return "none";
+  }
+  if (resourceHost === refererHost) {
+    return "same-origin";
+  }
+  const resourceApex = getApexDomain(resourceHost);
+  const refererApex = getApexDomain(refererHost);
+  return resourceApex === refererApex ? "same-site" : "cross-site";
+}
+
+function collectHeaderScenarios(url) {
+  const scenarios = [];
+  const seen = new Set();
+  const push = (referer, site) => {
+    const key = `${referer ?? "<none>"}|${site}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    scenarios.push({ referer, site });
+  };
+
   try {
-    const referer = new URL(url);
-    args.push("-H", `referer: ${referer.origin}/`);
+    const parsed = new URL(url);
+    const originReferer = `${parsed.origin}/`;
+    push(originReferer, "same-origin");
+
+    const host = parsed.hostname;
+    const apex = getApexDomain(host);
+    const altHosts = new Set();
+    if (apex && apex !== host) {
+      altHosts.add(apex);
+      altHosts.add(`www.${apex}`);
+    }
+    const strippedHost = host.replace(/^(?:cdn|assets|images|img|static|media|content)\./, "");
+    if (strippedHost && strippedHost !== host) {
+      altHosts.add(strippedHost);
+      altHosts.add(`www.${strippedHost}`);
+    }
+    if (host.includes("wikimedia")) {
+      altHosts.add("commons.wikimedia.org");
+    }
+
+    for (const candidate of altHosts) {
+      try {
+        const candidateUrl = new URL(parsed.protocol + "//" + candidate + "/");
+        push(candidateUrl.toString(), determineFetchSite(host, candidateUrl.hostname));
+      } catch {
+        // ignore invalid candidates
+      }
+    }
   } catch {
-    // ignore invalid url when constructing referer
-  }
-  args.push(url);
-
-  let stdout;
-  try {
-    ({ stdout } = await execFileAsync("curl", args, {
-      encoding: "buffer",
-      maxBuffer: 50 * 1024 * 1024
-    }));
-  } catch (error) {
-    const stderr =
-      error.stderr && typeof error.stderr !== "string"
-        ? error.stderr.toString("utf-8")
-        : error.stderr;
-    const details = (stderr ?? error.message ?? "未知错误").trim();
-    throw new Error(details || "curl 调用失败");
+    // ignore invalid url when constructing referer list
   }
 
+  push(null, "none");
+  return scenarios;
+}
+
+function buildHeaderSets(url) {
+  const scenarios = collectHeaderScenarios(url);
+  const headerSets = [];
+  const seen = new Set();
+  for (const scenario of scenarios) {
+    const headers = [
+      ["user-agent", USER_AGENT],
+      ["accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"],
+      ["accept-language", "en-US,en;q=0.9,zh-CN;q=0.8"],
+      ["cache-control", "no-cache"],
+      ["pragma", "no-cache"],
+      ["sec-ch-ua", SEC_CH_UA],
+      ["sec-ch-ua-mobile", "?0"],
+      ["sec-ch-ua-platform", '"Windows"'],
+      ["sec-fetch-dest", "image"],
+      ["sec-fetch-mode", "no-cors"],
+      ["sec-fetch-site", scenario.site],
+      ["upgrade-insecure-requests", "1"],
+      ["dnt", "1"]
+    ];
+    if (scenario.referer) {
+      headers.push(["referer", scenario.referer]);
+    }
+    const key = headers.map(([name, value]) => `${name}:${value}`).join("| ");
+    if (!seen.has(key)) {
+      seen.add(key);
+      headerSets.push(headers);
+    }
+  }
+  return headerSets;
+}
+
+function parseCurlError(error) {
+  const stderr =
+    error.stderr && typeof error.stderr !== "string"
+      ? error.stderr.toString("utf-8")
+      : error.stderr;
+  const details = (stderr ?? error.message ?? "未知错误").toString().trim();
+  return new Error(details || "curl 调用失败");
+}
+
+function parseCurlOutput(buffer) {
   const delimiter = Buffer.from("\r\n\r\n");
-  let headerEnd = stdout.lastIndexOf(delimiter);
+  let headerEnd = buffer.lastIndexOf(delimiter);
   let bodyOffset = delimiter.length;
   if (headerEnd === -1) {
     const lfDelimiter = Buffer.from("\n\n");
-    headerEnd = stdout.lastIndexOf(lfDelimiter);
+    headerEnd = buffer.lastIndexOf(lfDelimiter);
     bodyOffset = lfDelimiter.length;
   }
   if (headerEnd === -1) {
     throw new Error("未能解析响应头");
   }
-  const headerBuffer = stdout.slice(0, headerEnd);
-  const body = stdout.slice(headerEnd + bodyOffset);
+  const headerBuffer = buffer.slice(0, headerEnd);
+  const body = buffer.slice(headerEnd + bodyOffset);
   const headerSections = headerBuffer
     .toString("utf-8")
     .split(/\r?\n\r?\n/)
@@ -365,12 +507,54 @@ async function fetchBinary(url) {
   const statusLine = lastHeader.split(/\r?\n/)[0] ?? "";
   const statusMatch = statusLine.match(/HTTP\/\d(?:\.\d)?\s+(\d+)/i);
   const status = statusMatch ? Number(statusMatch[1]) : 200;
-  if (status >= 400) {
-    throw new Error(`HTTP ${status}`);
-  }
   const contentTypeMatch = lastHeader.match(/content-type:\s*([^\r\n]+)/i);
   const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : "";
-  return { buffer: body, contentType };
+  return { status, body, contentType };
+}
+
+async function fetchBinary(url) {
+  const headerSets = buildHeaderSets(url);
+  let lastError = null;
+  for (const headers of headerSets) {
+    const args = [
+      "--silent",
+      "--show-error",
+      "--location",
+      "--compressed",
+      "--dump-header",
+      "-"
+    ];
+    for (const [name, value] of headers) {
+      if (!value) continue;
+      args.push("-H", `${name}: ${value}`);
+    }
+    args.push(url);
+
+    let stdout;
+    try {
+      ({ stdout } = await execFileAsync("curl", args, {
+        encoding: "buffer",
+        maxBuffer: 50 * 1024 * 1024
+      }));
+    } catch (error) {
+      lastError = parseCurlError(error);
+      continue;
+    }
+
+    let parsed;
+    try {
+      parsed = parseCurlOutput(stdout);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      continue;
+    }
+    if (parsed.status >= 400) {
+      lastError = new Error(`HTTP ${parsed.status}`);
+      continue;
+    }
+    return { buffer: parsed.body, contentType: parsed.contentType };
+  }
+  throw lastError ?? new Error("curl 调用失败");
 }
 
 async function writeIfChanged(filePath, data) {
